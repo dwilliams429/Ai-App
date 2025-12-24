@@ -1,22 +1,23 @@
 # dependencies
 node_modules
+**/node_modules/
 
 # env files
 .env
 .env.*
-server/.env
-client/.env
-# builds
-Client/dist/
+!.env.example
 
+# builds Outputs
+dist/
+build/
+coverage/
 
 # logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
 
-# OS
+# Misc
 .DS_Store
 
-#IDE
-.vscode/
