@@ -1,10 +1,25 @@
-"use strict";
+// server/models/User.js
 const mongoose = require("mongoose");
 
 const UserSchema = new mongoose.Schema(
   {
-    email: { type: String, required: true, unique: true, index: true },
-    passwordHash: { type: String, required: true },
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+      minlength: 2,
+    },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+    },
+    passwordHash: {
+      type: String,
+      required: true,
+    },
   },
   { timestamps: true }
 );
