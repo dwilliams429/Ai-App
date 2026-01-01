@@ -114,10 +114,11 @@ async function start() {
   );
 
   // ROUTES
-  app.use("/auth", authRoutes);
-  app.use("/inventory", inventoryRoutes);
-  app.use("/recipes", recipesRoutes);
-  app.use("/shopping", shoppingRoutes);
+  app.use("/api/auth", authRoutes);
+  app.use("/api/inventory", inventoryRoutes);
+  app.use("/api/recipes", recipesRoutes);
+  app.use("/api/shopping", shoppingRoutes);
+
 
   app.get("/", (req, res) => res.status(200).send("OK"));
 
