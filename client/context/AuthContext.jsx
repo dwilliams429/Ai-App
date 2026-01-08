@@ -1,6 +1,6 @@
 // client/context/AuthContext.jsx
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import api from "../api/http"; // <-- uses your axios instance w/ baseURL "/api" + withCredentials
+import api from "../api/http";
 
 const AuthContext = createContext(null);
 
@@ -17,35 +17,35 @@ export function AuthProvider({ children }) {
       return res.data;
     } catch (err) {
       setUser(null);
-      // not logged in is normal, don't treat as fatal
       return null;
     } finally {
       setLoading(false);
     }
   }
 
-  // ✅ FIX: send JSON body correctly
   async function signup(payload) {
     setAuthError("");
-    const email = payload?.email ?? "";
-    const password = payload?.password ?? "";
-    const name = payload?.name ?? "";
+
+    // Normalize and validate client-side before sending
+    const name = String(payload?.name ?? "").trim();
+    const email = String(payload?.email ?? "").trim().toLowerCase();
+    const password = String(payload?.password ?? "");
+
+    // Temporary debug (remove after fixed)
+    console.log("[auth] signup() payload received:", { name, email, passwordLength: password.length });
 
     try {
-      const res = await api.post("/auth/signup", {
-        email,
-        password,
-        name, // server can ignore if not used
-      });
+      const res = await api.post(
+        "/auth/signup",
+        { name, email, password },
+        { headers: { "Content-Type": "application/json" } }
+      );
 
-      // session cookie gets set by server; now verify
       await refreshMe();
       return res.data;
     } catch (err) {
-      const msg =
-        err?.response?.data?.error ||
-        err?.message ||
-        "Signup failed";
+      const msg = err?.response?.data?.error || err?.message || "Signup failed";
+      console.error("[auth] signup() error:", err?.response?.data || err);
       setAuthError(msg);
       throw new Error(msg);
     }
@@ -53,15 +53,25 @@ export function AuthProvider({ children }) {
 
   async function login(email, password) {
     setAuthError("");
+
+    const cleanEmail = String(email ?? "").trim().toLowerCase();
+    const cleanPassword = String(password ?? "");
+
+    // Temporary debug
+    console.log("[auth] login() payload:", { email: cleanEmail, passwordLength: cleanPassword.length });
+
     try {
-      const res = await api.post("/auth/login", { email, password });
+      const res = await api.post(
+        "/auth/login",
+        { email: cleanEmail, password: cleanPassword },
+        { headers: { "Content-Type": "application/json" } }
+      );
+
       await refreshMe();
       return res.data;
     } catch (err) {
-      const msg =
-        err?.response?.data?.error ||
-        err?.message ||
-        "Login failed";
+      const msg = err?.response?.data?.error || err?.message || "Login failed";
+      console.error("[auth] login() error:", err?.response?.data || err);
       setAuthError(msg);
       throw new Error(msg);
     }
@@ -70,7 +80,7 @@ export function AuthProvider({ children }) {
   async function logout() {
     setAuthError("");
     try {
-      await api.post("/auth/logout");
+      await api.post("/auth/logout", {}, { headers: { "Content-Type": "application/json" } });
     } finally {
       setUser(null);
     }

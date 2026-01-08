@@ -1,3 +1,4 @@
+// client/pages/Signup.jsx
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import GlassCard from "../components/GlassCard";
@@ -10,6 +11,7 @@ export default function Signup() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -17,17 +19,28 @@ export default function Signup() {
     e.preventDefault();
     setErr("");
 
-   // name optional (server only requires email/password)
-    if (!email.includes("@")) return setErr("Enter a valid email");
-    if (password.length < 6) return setErr("Password must be at least 6 characters");
+    const cleanName = name.trim();
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPassword = password;
 
+    // Basic client validation
+    if (cleanName.length < 2) return setErr("Name must be at least 2 characters");
+    if (!cleanEmail.includes("@")) return setErr("Enter a valid email");
+    if (cleanPassword.length < 6) return setErr("Password must be at least 6 characters");
+
+    // Temporary debug: proves values exist before calling AuthContext.signup()
+    console.log("[signup page] submitting:", {
+      cleanName,
+      cleanEmail,
+      passwordLength: cleanPassword.length,
+    });
 
     setBusy(true);
     try {
-      await signup({ name: name.trim(), email, password });
+      await signup({ name: cleanName, email: cleanEmail, password: cleanPassword });
       nav("/");
     } catch (e2) {
-      setErr(e2.message || "Signup failed");
+      setErr(e2?.message || "Signup failed");
     } finally {
       setBusy(false);
     }
@@ -38,12 +51,24 @@ export default function Signup() {
       <form onSubmit={onSubmit} className="auth-form">
         <label className="field">
           <span className="field__label">Name</span>
-          <input className="field__input" value={name} onChange={(e) => setName(e.target.value)} />
+          <input
+            className="field__input"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoComplete="name"
+            placeholder="Your name"
+          />
         </label>
 
         <label className="field">
           <span className="field__label">Email</span>
-          <input className="field__input" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <input
+            className="field__input"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="email"
+            placeholder="you@example.com"
+          />
         </label>
 
         <label className="field">
@@ -53,6 +78,8 @@ export default function Signup() {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            autoComplete="new-password"
+            placeholder="••••••••"
           />
         </label>
 
