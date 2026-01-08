@@ -1,14 +1,6 @@
-import axios from "axios";
-
-const baseURL = import.meta.env.VITE_API_BASE_URL;
-
-// Helpful console proof
-console.log("✅ API Base URL:", baseURL);
-
-export const api = axios.create({
-  baseURL,
-  withCredentials: true,
-  headers: {
-    "Content-Type": "application/json",
-  },
-});
+// client/api/api.js
+// Keep this file only as a compatibility shim.
+// Everything should import from ../api/http instead.
+import api from "./http";
+export default api;
+export { api };
