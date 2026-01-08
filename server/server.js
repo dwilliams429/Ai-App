@@ -115,9 +115,9 @@ async function start() {
 
   // ROUTES
   app.use("/api/auth", authRoutes);
-  app.use("/api/inventory", inventoryRoutes);
-  app.use("/api/recipes", recipesRoutes);
-  app.use("/api/shopping", shoppingRoutes);
+app.use("/api/inventory", inventoryRoutes);
+app.use("/api/recipes", recipesRoutes);
+app.use("/api/shopping", shoppingRoutes);
 
 
   app.get("/", (req, res) => res.status(200).send("OK"));

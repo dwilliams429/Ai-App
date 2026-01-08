@@ -1,29 +1,37 @@
 // client/api/http.js
 import axios from "axios";
 
-// We route all API calls through Vercel rewrites:
-//   /api/*  ->  Render backend
-// This avoids cross-origin issues and keeps the frontend simple.
+// In production, call Render directly.
+// In dev, call your local server.
+const API_ORIGIN = import.meta.env.PROD
+  ? import.meta.env.VITE_API_URL // e.g. "https://ai-app-8ale.onrender.com"
+  : (import.meta.env.VITE_API_URL || "http://localhost:5050");
+
+// Safety: remove trailing slash
+const origin = String(API_ORIGIN || "").replace(/\/+$/, "");
+
 const api = axios.create({
-  baseURL: "/api",
+  baseURL: `${origin}/api`,
   withCredentials: true,
   headers: {
     "Content-Type": "application/json",
   },
 });
 
-// Helpful debug: log requests in dev/prod while you're fixing deploy issues
-api.interceptors.request.use(
-  (config) => {
-    try {
-      const method = (config.method || "GET").toUpperCase();
-      const url = `${config.baseURL || ""}${config.url || ""}`;
-      // NOTE: Axios may transform data later, but this is still useful
-      console.log(`[api] ${method} ${url}`, config.data ?? "");
-    } catch (_) {}
-    return config;
-  },
-  (error) => Promise.reject(error)
+// Debug logging (keep while deploying; remove later)
+api.interceptors.request.use((config) => {
+  const method = (config.method || "GET").toUpperCase();
+  const url = `${config.baseURL || ""}${config.url || ""}`;
+  console.log(`[api] ${method} ${url}`, config.data ?? "");
+  return config;
+});
+
+api.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    console.error("[api] error:", err?.response?.status, err?.response?.data || err?.message);
+    return Promise.reject(err);
+  }
 );
 
 export default api;

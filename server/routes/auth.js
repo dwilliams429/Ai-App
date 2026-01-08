@@ -1,3 +1,4 @@
+// server/routes/auth.js
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const User = require("../models/User");
@@ -5,7 +6,7 @@ const requireAuth = require("../middleware/requireAuth");
 
 const router = express.Router();
 
-// POST /auth/signup  (Vercel rewrite handles /api -> Render)
+// POST /api/auth/signup
 router.post("/signup", async (req, res) => {
   try {
     const { name, email, password } = req.body || {};
@@ -25,7 +26,7 @@ router.post("/signup", async (req, res) => {
     const user = await User.create({
       name: cleanName,
       email: cleanEmail,
-      passwordHash
+      passwordHash,
     });
 
     // session
@@ -35,7 +36,7 @@ router.post("/signup", async (req, res) => {
 
     return res.status(201).json({
       ok: true,
-      user: { id: user._id, email: user.email, name: user.name }
+      user: { id: user._id, email: user.email, name: user.name },
     });
   } catch (e) {
     console.error("signup error:", e);
@@ -43,7 +44,7 @@ router.post("/signup", async (req, res) => {
   }
 });
 
-// POST /auth/login
+// POST /api/auth/login
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body || {};
@@ -63,7 +64,7 @@ router.post("/login", async (req, res) => {
 
     return res.json({
       ok: true,
-      user: { id: user._id, email: user.email, name: user.name }
+      user: { id: user._id, email: user.email, name: user.name },
     });
   } catch (e) {
     console.error("login error:", e);
@@ -71,7 +72,7 @@ router.post("/login", async (req, res) => {
   }
 });
 
-// POST /auth/logout
+// POST /api/auth/logout
 router.post("/logout", (req, res) => {
   req.session.destroy(() => {
     res.clearCookie("sid");
@@ -79,15 +80,15 @@ router.post("/logout", (req, res) => {
   });
 });
 
-// GET /auth/me
+// GET /api/auth/me
 router.get("/me", requireAuth, (req, res) => {
   return res.json({
     ok: true,
     user: {
       id: req.session.userId,
       email: req.session.email,
-      name: req.session.name || ""
-    }
+      name: req.session.name || "",
+    },
   });
 });
 

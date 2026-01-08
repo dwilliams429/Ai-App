@@ -26,26 +26,18 @@ export function AuthProvider({ children }) {
   async function signup(payload) {
     setAuthError("");
 
-    // Normalize and validate client-side before sending
     const name = String(payload?.name ?? "").trim();
     const email = String(payload?.email ?? "").trim().toLowerCase();
     const password = String(payload?.password ?? "");
 
-    // Temporary debug (remove after fixed)
-    console.log("[auth] signup() payload received:", { name, email, passwordLength: password.length });
+    console.log("[auth] signup payload:", { name, email, passwordLength: password.length });
 
     try {
-      const res = await api.post(
-        "/auth/signup",
-        { name, email, password },
-        { headers: { "Content-Type": "application/json" } }
-      );
-
+      const res = await api.post("/auth/signup", { name, email, password });
       await refreshMe();
       return res.data;
     } catch (err) {
       const msg = err?.response?.data?.error || err?.message || "Signup failed";
-      console.error("[auth] signup() error:", err?.response?.data || err);
       setAuthError(msg);
       throw new Error(msg);
     }
@@ -57,21 +49,14 @@ export function AuthProvider({ children }) {
     const cleanEmail = String(email ?? "").trim().toLowerCase();
     const cleanPassword = String(password ?? "");
 
-    // Temporary debug
-    console.log("[auth] login() payload:", { email: cleanEmail, passwordLength: cleanPassword.length });
+    console.log("[auth] login payload:", { email: cleanEmail, passwordLength: cleanPassword.length });
 
     try {
-      const res = await api.post(
-        "/auth/login",
-        { email: cleanEmail, password: cleanPassword },
-        { headers: { "Content-Type": "application/json" } }
-      );
-
+      const res = await api.post("/auth/login", { email: cleanEmail, password: cleanPassword });
       await refreshMe();
       return res.data;
     } catch (err) {
       const msg = err?.response?.data?.error || err?.message || "Login failed";
-      console.error("[auth] login() error:", err?.response?.data || err);
       setAuthError(msg);
       throw new Error(msg);
     }
@@ -80,7 +65,7 @@ export function AuthProvider({ children }) {
   async function logout() {
     setAuthError("");
     try {
-      await api.post("/auth/logout", {}, { headers: { "Content-Type": "application/json" } });
+      await api.post("/auth/logout");
     } finally {
       setUser(null);
     }
