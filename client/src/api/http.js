@@ -1,137 +1,44 @@
-"use strict";
+// client/src/api/http.js
+import axios from "axios";
 
-// Central client API wrapper (NO JSX IN THIS FILE)
+/**
+ * PRODUCTION (Vercel):
+ *   Use same-origin "/api" so Vercel rewrites proxy to Render.
+ *
+ * DEVELOPMENT (local):
+ *   Use VITE_API_URL if provided, else http://localhost:5050
+ */
 
-const BASE ="https://api-app-8ale.onrender.com/api";
+const isProd = import.meta.env.PROD;
 
-async function request(path, options = {}) {
-  const res = await fetch(`${BASE}${path}`, {
-    credentials: "include", // IMPORTANT for cookie sessions
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
-    },
-    ...options,
-  });
-
-  const data = await res.json().catch(() => ({}));
-
-  if (!res.ok) {
-    const msg = data?.error || data?.message || `Request failed (${res.status})`;
-    const err = new Error(msg);
-    err.status = res.status;
-    err.data = data;
-    throw err;
-  }
-
-  return data;
+function trimSlash(url) {
+  return String(url || "").replace(/\/+$/, "");
 }
 
-export const api = {
-  // -------- Auth --------
-  async signup(payload) {
-    const data = await request("/auth/signup", {
-      method: "POST",
-      body: JSON.stringify(payload || {}),
-    });
-    return data?.user || null;
-  },
+const devOrigin = trimSlash(import.meta.env.VITE_API_URL || "http://localhost:5050");
+const baseURL = isProd ? "/api" : `${devOrigin}/api`;
 
-  async login(payload) {
-    const data = await request("/auth/login", {
-      method: "POST",
-      body: JSON.stringify(payload || {}),
-    });
-    return data?.user || null;
+const api = axios.create({
+  baseURL,
+  withCredentials: true,
+  headers: {
+    "Content-Type": "application/json",
   },
+});
 
-  async logout() {
-    return request("/auth/logout", { method: "POST" });
-  },
+api.interceptors.request.use((config) => {
+  const method = (config.method || "GET").toUpperCase();
+  const url = `${config.baseURL || ""}${config.url || ""}`;
+  console.log(`[api] ${method} ${url}`, config.data ?? "");
+  return config;
+});
 
-  async me() {
-    const data = await request("/auth/me", { method: "GET" });
-    return data?.user || null;
-  },
+api.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    console.error("[api] error:", err?.response?.status, err?.response?.data || err?.message);
+    return Promise.reject(err);
+  }
+);
 
-  // -------- Inventory --------
-  listInventory() {
-    return request("/inventory", { method: "GET" });
-  },
-
-  addInventory(name, qty) {
-    return request("/inventory", {
-      method: "POST",
-      body: JSON.stringify({ name, qty }),
-    });
-  },
-
-  toggleInventory(id, done) {
-    return request(`/inventory/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ done }),
-    });
-  },
-
-  updateInventory(id, updates) {
-    return request(`/inventory/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify(updates || {}),
-    });
-  },
-
-  deleteInventory(id) {
-    return request(`/inventory/${id}`, { method: "DELETE" });
-  },
-
-  // -------- Shopping List --------
-  listShopping() {
-    return request("/shopping", { method: "GET" });
-  },
-
-  addShopping(name, qty) {
-    return request("/shopping", {
-      method: "POST",
-      body: JSON.stringify({ name, qty }),
-    });
-  },
-
-  updateShopping(id, updates) {
-    return request(`/shopping/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify(updates || {}),
-    });
-  },
-
-  deleteShopping(id) {
-    return request(`/shopping/${id}`, { method: "DELETE" });
-  },
-
-  // -------- Recipes --------
-  listRecipes() {
-    return request("/recipes", { method: "GET" });
-  },
-
-  deleteRecipe(id) {
-    return request(`/recipes/${id}`, { method: "DELETE" });
-  },
-
-  /**
-   * Generate a recipe from Home.jsx
-   * Tries /recipes/generate first (most common),
-   * falls back to /recipes if your server uses that.
-   */
-  async generateRecipe(payload) {
-    const body = JSON.stringify(payload || {});
-
-    try {
-      return await request("/recipes/generate", { method: "POST", body });
-    } catch (e) {
-      // fallback if your backend route is POST /api/recipes
-      if (e?.status === 404) {
-        return request("/recipes", { method: "POST", body });
-      }
-      throw e;
-    }
-  },
-};
+export default api;
