@@ -1,25 +1,17 @@
-// client/api/http.js
+// client/src/api/http.js
 import axios from "axios";
 
-const isProd = import.meta.env.PROD;
-
-// Set this in Vercel Production:
-// VITE_API_URL = https://ai-app-8ale.onrender.com
-const envUrl = import.meta.env.VITE_API_URL;
-
-const API_ORIGIN = isProd
-  ? (envUrl || "https://ai-app-8ale.onrender.com")
-  : (envUrl || "http://localhost:5050");
-
-const origin = String(API_ORIGIN).replace(/\/+$/, "");
-const baseURL = `${origin}/api`;
-
-console.log("[http] baseURL =", baseURL);
+// IMPORTANT:
+// Set this in Vercel (Production):
+const BASE = "https://ai-app-8ale.onrender.com/api"
+const origin = String(import.meta.env.VITE_API_URL || "https://ai-app-8ale.onrender.com/api").replace(/\/+$/, "");
 
 const api = axios.create({
-  baseURL,
+  baseURL: `${origin}/api`,
   withCredentials: true,
   headers: { "Content-Type": "application/json" },
 });
+
+console.log("[http] baseURL =", api.defaults.baseURL);
 
 export default api;
