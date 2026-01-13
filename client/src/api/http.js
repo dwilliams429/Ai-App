@@ -2,9 +2,7 @@
 
 // Central client API wrapper (NO JSX IN THIS FILE)
 
-const BASE =
-  (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_BASE) ||
-  "http://localhost:5050/api";
+const BASE ="https://api-app-8ale.onrender.com/api";
 
 async function request(path, options = {}) {
   const res = await fetch(`${BASE}${path}`, {
