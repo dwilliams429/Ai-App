@@ -1,4 +1,4 @@
-// client/context/AuthContext.jsx
+// client/src/context/AuthContext.jsx
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import api from "../api/http";
 
@@ -25,15 +25,12 @@ export function AuthProvider({ children }) {
 
   async function signup(payload) {
     setAuthError("");
-
-    const name = String(payload?.name ?? "").trim();
     const email = String(payload?.email ?? "").trim().toLowerCase();
     const password = String(payload?.password ?? "");
-
-    console.log("[auth] signup payload:", { name, email, passwordLength: password.length });
+    const name = String(payload?.name ?? "").trim();
 
     try {
-      const res = await api.post("/auth/signup", { name, email, password });
+      const res = await api.post("/auth/signup", { email, password, name });
       await refreshMe();
       return res.data;
     } catch (err) {
@@ -45,14 +42,11 @@ export function AuthProvider({ children }) {
 
   async function login(email, password) {
     setAuthError("");
-
     const cleanEmail = String(email ?? "").trim().toLowerCase();
-    const cleanPassword = String(password ?? "");
-
-    console.log("[auth] login payload:", { email: cleanEmail, passwordLength: cleanPassword.length });
+    const cleanPass = String(password ?? "");
 
     try {
-      const res = await api.post("/auth/login", { email: cleanEmail, password: cleanPassword });
+      const res = await api.post("/auth/login", { email: cleanEmail, password: cleanPass });
       await refreshMe();
       return res.data;
     } catch (err) {
@@ -98,3 +92,4 @@ export function useAuth() {
   if (!ctx) throw new Error("useAuth must be used inside <AuthProvider>");
   return ctx;
 }
+export * from "../src/context/AuthContext";

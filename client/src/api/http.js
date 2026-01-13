@@ -1,31 +1,25 @@
 // client/src/api/http.js
 import axios from "axios";
 
-/**
- * PRODUCTION (Vercel):
- *   Use same-origin "/api" so Vercel rewrites proxy to Render.
- *
- * DEVELOPMENT (local):
- *   Use VITE_API_URL if provided, else http://localhost:5050
- */
+// Vercel env var MUST be:
+// VITE_API_URL = "https://ai-app-8ale.onrender.com"   (NO /api, NO "VITE_API_URL=" prefix)
+const ORIGIN =
+  (import.meta?.env?.VITE_API_URL && String(import.meta.env.VITE_API_URL)) ||
+  "http://localhost:5050";
 
-const isProd = import.meta.env.PROD;
+// Safety: remove trailing slash
+const origin = ORIGIN.replace(/\/+$/, "");
 
-function trimSlash(url) {
-  return String(url || "").replace(/\/+$/, "");
-}
-
-const devOrigin = trimSlash(import.meta.env.VITE_API_URL || "http://localhost:5050");
-const baseURL = isProd ? "/api" : `${devOrigin}/api`;
-
+// IMPORTANT:
+// - baseURL ends with /api
+// - withCredentials must be true for cookie sessions
 const api = axios.create({
-  baseURL,
+  baseURL: `${origin}/api`,
   withCredentials: true,
-  headers: {
-    "Content-Type": "application/json",
-  },
+  headers: { "Content-Type": "application/json" },
 });
 
+// Optional but helpful while debugging:
 api.interceptors.request.use((config) => {
   const method = (config.method || "GET").toUpperCase();
   const url = `${config.baseURL || ""}${config.url || ""}`;
@@ -41,4 +35,4 @@ api.interceptors.response.use(
   }
 );
 
-export default api;
+export { default } from "../src/api/http";
