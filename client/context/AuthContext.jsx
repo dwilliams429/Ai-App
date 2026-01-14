@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
-import { api } from "../src/api/http";
+// client/src/context/AuthContext.jsx
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import api from "../api/http";
 
 const AuthContext = createContext(null);
 
@@ -10,10 +11,14 @@ export function AuthProvider({ children }) {
 
   async function refreshMe() {
     try {
-      const res = await api.me();
-      setUser(res.user);
-    } catch {
+      const res = await api.get("/auth/me");
+      setUser(res.data?.user || null);
+      setAuthError("");
+      return res.data;
+    } catch (err) {
+      // expected before login
       setUser(null);
+      return null;
     } finally {
       setLoading(false);
     }
@@ -21,44 +26,67 @@ export function AuthProvider({ children }) {
 
   async function signup(payload) {
     setAuthError("");
+    const email = payload?.email ?? "";
+    const password = payload?.password ?? "";
+    const name = payload?.name ?? "";
+
     try {
-      await api.signup(payload);
+      const res = await api.post("/auth/signup", { email, password, name });
       await refreshMe();
+      return res.data;
     } catch (err) {
-      setAuthError(err.message);
-      throw err;
+      const msg = err?.response?.data?.error || err?.message || "Signup failed";
+      setAuthError(msg);
+      throw new Error(msg);
     }
   }
 
-  async function login(payload) {
+  async function login(email, password) {
     setAuthError("");
     try {
-      await api.login(payload);
+      const res = await api.post("/auth/login", { email, password });
       await refreshMe();
+      return res.data;
     } catch (err) {
-      setAuthError(err.message);
-      throw err;
+      const msg = err?.response?.data?.error || err?.message || "Login failed";
+      setAuthError(msg);
+      throw new Error(msg);
     }
   }
 
   async function logout() {
-    await api.logout();
-    setUser(null);
+    setAuthError("");
+    try {
+      await api.post("/auth/logout");
+    } finally {
+      setUser(null);
+    }
   }
 
   useEffect(() => {
     refreshMe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return (
-    <AuthContext.Provider
-      value={{ user, loading, authError, signup, login, logout }}
-    >
-      {children}
-    </AuthContext.Provider>
+  const value = useMemo(
+    () => ({
+      user,
+      loading,
+      authError,
+      refreshMe,
+      signup,
+      login,
+      logout,
+      setUser,
+    }),
+    [user, loading, authError]
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {
-  return useContext(AuthContext);
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth must be used inside <AuthProvider>");
+  return ctx;
 }
