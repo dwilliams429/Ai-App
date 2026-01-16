@@ -6,16 +6,15 @@ import axios from "axios";
  * VITE_API_URL = https://ai-app-8ale.onrender.com
  * (NO trailing /api)
  */
-const API_ORIGIN =
-  import.meta.env.VITE_API_URL || "http://localhost:5050";
+const baseURL =
+  import.meta.env.VITE_API_URL || "/api";
 
 // remove trailing slash if present
 const origin = String(API_ORIGIN).replace(/\/+$/, "");
 
-const api = axios.create({
-  baseURL: `${origin}/api`,
+export const api = axios.create({
+  baseURL,
   withCredentials: true,
-  headers: { "Content-Type": "application/json" },
 });
 
 // Optional: log only real errors (NOT /auth/me 401 on first load)
