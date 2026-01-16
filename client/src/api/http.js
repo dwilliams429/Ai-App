@@ -1,15 +1,18 @@
+// client/src/api/http.js
 import axios from "axios";
 
 /**
- * ✅ Option A (recommended with your vercel.json rewrite):
- * Leave VITE_API_URL unset in Vercel and use "/api" so Vercel rewrites handle it.
- *
- * ✅ Option B (direct):
- * VITE_API_URL = https://ai-app-8ale.onrender.com/api
+ * In Vercel env vars set:
+ * VITE_API_URL = https://ai-app-8ale.onrender.com
+ * (NO trailing slash, NO /api)
  */
-const baseURL = import.meta.env.VITE_API_URL || "/api";
+const API_ORIGIN = (import.meta.env.VITE_API_URL || "").replace(/\/+$/, "");
 
-export const api = axios.create({
+// If VITE_API_URL exists, call the server directly.
+// Otherwise (local dev / same origin with rewrites), fall back to "/api".
+const baseURL = API_ORIGIN ? `${API_ORIGIN}/api` : "/api";
+
+const api = axios.create({
   baseURL,
   withCredentials: true,
 });
@@ -20,10 +23,7 @@ api.interceptors.response.use(
     const status = err?.response?.status;
     const url = err?.config?.url || "";
 
-    // Ignore expected 401 from /auth/me before login
-    if (status === 401 && url.includes("/auth/me")) {
-      return Promise.reject(err);
-    }
+    if (status === 401 && url.includes("/auth/me")) return Promise.reject(err);
 
     console.error("[api] error:", status, err?.response?.data || err?.message);
     return Promise.reject(err);

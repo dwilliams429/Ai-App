@@ -9,20 +9,20 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState("");
 
-  async function refreshMe() {
+    async function refreshMe() {
     try {
       const res = await api.get("/auth/me");
-      setUser(res.data?.user || null);
+      setUser(res.data?.user || res.data || null);
       setAuthError("");
       return res.data;
     } catch (err) {
-      // expected before login
       setUser(null);
       return null;
     } finally {
       setLoading(false);
     }
   }
+
 
   async function signup(payload) {
     setAuthError("");
@@ -41,8 +41,12 @@ export function AuthProvider({ children }) {
     }
   }
 
-  async function login(email, password) {
+  async function login(payload) {
     setAuthError("");
+
+    const email = payload?.email ?? "";
+    const password = payload?.password ?? "";
+
     try {
       const res = await api.post("/auth/login", { email, password });
       await refreshMe();
@@ -53,6 +57,7 @@ export function AuthProvider({ children }) {
       throw new Error(msg);
     }
   }
+
 
   async function logout() {
     setAuthError("");
