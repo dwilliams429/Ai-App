@@ -9,10 +9,10 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState("");
 
-    async function refreshMe() {
+  async function refreshMe() {
     try {
       const res = await api.get("/auth/me");
-      setUser(res.data?.user || res.data || null);
+      setUser(res.data?.user || null);
       setAuthError("");
       return res.data;
     } catch (err) {
@@ -23,7 +23,6 @@ export function AuthProvider({ children }) {
     }
   }
 
-
   async function signup(payload) {
     setAuthError("");
     const email = payload?.email ?? "";
@@ -32,7 +31,7 @@ export function AuthProvider({ children }) {
 
     try {
       const res = await api.post("/auth/signup", { email, password, name });
-      await refreshMe();
+      setUser(res.data?.user || null);
       return res.data;
     } catch (err) {
       const msg = err?.response?.data?.error || err?.message || "Signup failed";
@@ -41,15 +40,15 @@ export function AuthProvider({ children }) {
     }
   }
 
+  // ✅ Accept object payload so Login.jsx works as-is
   async function login(payload) {
     setAuthError("");
-
     const email = payload?.email ?? "";
     const password = payload?.password ?? "";
 
     try {
       const res = await api.post("/auth/login", { email, password });
-      await refreshMe();
+      setUser(res.data?.user || null);
       return res.data;
     } catch (err) {
       const msg = err?.response?.data?.error || err?.message || "Login failed";
@@ -57,7 +56,6 @@ export function AuthProvider({ children }) {
       throw new Error(msg);
     }
   }
-
 
   async function logout() {
     setAuthError("");
