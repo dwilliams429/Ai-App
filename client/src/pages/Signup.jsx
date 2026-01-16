@@ -1,16 +1,15 @@
-// client/src/pages/Signup.jsx
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import GlassCard from "../components/GlassCard";
 import { useAuth } from "../context/AuthContext";
 
 export default function Signup() {
-  const { signup } = useAuth();
+  const { signup } = useAuth(); // ✅ MUST be useAuth()
   const nav = useNavigate();
 
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [name, setName] = useState("Demo User 1");
+  const [email, setEmail] = useState("demo1@demo.com");
+  const [password, setPassword] = useState("Demo123456!");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -18,25 +17,23 @@ export default function Signup() {
     e.preventDefault();
     setErr("");
 
-    if (name.trim().length < 2) return setErr("Name must be at least 2 characters");
+    if (!name.trim()) return setErr("Name is required");
     if (!email.includes("@")) return setErr("Enter a valid email");
-    if (password.length < 6) return setErr("Password must be at least 6 characters");
+    if (!password) return setErr("Password is required");
 
     setBusy(true);
     try {
-      // ✅ FIX: your server likely expects name; AuthContext.signup currently doesn't accept it.
-      // We'll call api.signup directly OR update AuthContext. Easiest: update AuthContext next step.
-      await signup(name.trim(), email, password);
+      await signup({ name, email, password });
       nav("/");
     } catch (e2) {
-      setErr(e2?.message || "Signup failed");
+      setErr(e2.message || "Signup failed");
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <GlassCard title="Create Account" subtitle="Signup uses secure sessions + cookies.">
+    <GlassCard title="Create account" subtitle="Sign up uses secure sessions + cookies.">
       <form onSubmit={onSubmit} className="auth-form">
         <label className="field">
           <span className="field__label">Name</span>
@@ -65,7 +62,7 @@ export default function Signup() {
         </button>
 
         <div className="muted" style={{ marginTop: 12 }}>
-          Already have an account? <Link to="/login">Login</Link>
+          Have an account? <Link to="/login">Login</Link>
         </div>
       </form>
     </GlassCard>
