@@ -1,23 +1,19 @@
-// client/src/api/http.js
 import axios from "axios";
 
 /**
- * ✅ Set in Vercel:
- * VITE_API_URL = https://ai-app-8ale.onrender.com
- * (NO trailing /api)
+ * ✅ Option A (recommended with your vercel.json rewrite):
+ * Leave VITE_API_URL unset in Vercel and use "/api" so Vercel rewrites handle it.
+ *
+ * ✅ Option B (direct):
+ * VITE_API_URL = https://ai-app-8ale.onrender.com/api
  */
-const baseURL =
-  import.meta.env.VITE_API_URL || "/api";
-
-// remove trailing slash if present
-const origin = String(API_ORIGIN).replace(/\/+$/, "");
+const baseURL = import.meta.env.VITE_API_URL || "/api";
 
 export const api = axios.create({
   baseURL,
   withCredentials: true,
 });
 
-// Optional: log only real errors (NOT /auth/me 401 on first load)
 api.interceptors.response.use(
   (res) => res,
   (err) => {
