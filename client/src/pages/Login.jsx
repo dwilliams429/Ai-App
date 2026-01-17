@@ -21,7 +21,7 @@ export default function Login() {
 
     setBusy(true);
     try {
-      await login({ email, password });
+      await login({ email, password }); // ✅ matches AuthContext.login(payload)
       nav("/");
     } catch (e2) {
       setErr(e2.message || "Login failed");
