@@ -1,12 +1,34 @@
 // client/src/api/http.js
 import axios from "axios";
 
-// Frontend should call SAME-ORIGIN /api
-// Vercel will route /api -> your server (Render) via your rewrite/proxy setup.
-const api = axios.create({
-  baseURL: "/api",
+/**
+ * In Vercel set:
+ *   VITE_API_URL = https://ai-app-8ale.onrender.com
+ * (NO trailing /api)
+ *
+ * Locally, Vite proxy can use "/api"
+ */
+const baseURL = import.meta.env.VITE_API_URL || "/api";
+
+export const api = axios.create({
+  baseURL,
   withCredentials: true,
-  headers: { "Content-Type": "application/json" },
 });
+
+// Log only real errors (ignore expected 401 from /auth/me before login)
+api.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    const status = err?.response?.status;
+    const url = err?.config?.url || "";
+
+    if (status === 401 && url.includes("/auth/me")) {
+      return Promise.reject(err);
+    }
+
+    console.error("[api] error:", status, err?.response?.data || err?.message);
+    return Promise.reject(err);
+  }
+);
 
 export default api;

@@ -2,114 +2,117 @@
 import api from "./http";
 
 /**
- * Normalize common API shapes:
- * - If API returns { items: [...] } or { data: [...] } or { recipes: [...] }, this returns the array.
- * - If API returns an array directly, returns it.
- * - Otherwise returns [].
+ * Try multiple endpoints for the same action.
+ * If an endpoint 404s, we try the next one.
  */
-function toArray(maybeArrayOrObject, possibleKeys = []) {
-  if (Array.isArray(maybeArrayOrObject)) return maybeArrayOrObject;
-  if (maybeArrayOrObject && typeof maybeArrayOrObject === "object") {
-    for (const k of possibleKeys) {
-      if (Array.isArray(maybeArrayOrObject[k])) return maybeArrayOrObject[k];
+async function tryRequest(makeRequestFns) {
+  let lastErr = null;
+
+  for (const fn of makeRequestFns) {
+    try {
+      const res = await fn();
+      return res?.data;
+    } catch (err) {
+      const status = err?.response?.status;
+      // If endpoint doesn't exist, try next
+      if (status === 404) {
+        lastErr = err;
+        continue;
+      }
+      // Any other error -> stop immediately (auth, 500, validation, etc)
+      throw err;
     }
   }
-  return [];
+
+  // If we got here, everything 404'd
+  const msg =
+    lastErr?.response?.data?.error ||
+    lastErr?.message ||
+    "API route not found (all candidate endpoints returned 404).";
+  throw new Error(msg);
 }
 
-async function unwrap(res) {
-  return res?.data ?? null;
+function asArray(v) {
+  return Array.isArray(v) ? v : [];
 }
 
 const ft = {
-  // ---------- AUTH ----------
-  async signup({ name, email, password }) {
-    const res = await api.post("/auth/signup", { name, email, password });
-    return unwrap(res);
-  },
-
-  async login({ email, password }) {
-    const res = await api.post("/auth/login", { email, password });
-    return unwrap(res);
-  },
-
-  async me() {
-    const res = await api.get("/auth/me");
-    return unwrap(res);
-  },
-
-  async logout() {
-    const res = await api.post("/auth/logout");
-    return unwrap(res);
-  },
-
-  // ---------- RECIPES ----------
-  async generateRecipe({ ingredients, diet, timeMinutes }) {
-    // Your server might expect different keys; this supports common ones.
-    const payload = {
-      ingredients,
-      diet,
-      timeMinutes,
-      time: timeMinutes,
-      minutes: timeMinutes,
-    };
-    const res = await api.post("/recipes/generate", payload);
-    return unwrap(res);
+  // ---------- Recipes ----------
+  async generateRecipe(payload) {
+    const data = await tryRequest([
+      () => api.post("/recipes/generate", payload),
+      () => api.post("/recipe/generate", payload),
+      () => api.post("/ai/recipe", payload),
+      () => api.post("/ai/generate", payload),
+      () => api.post("/generate", payload),
+    ]);
+    return data;
   },
 
   async listRecipes() {
-    const res = await api.get("/recipes");
-    const data = await unwrap(res);
-    return toArray(data, ["recipes", "items", "data"]);
+    const data = await tryRequest([
+      () => api.get("/recipes"),
+      () => api.get("/recipe"),
+      () => api.get("/saved-recipes"),
+    ]);
+    // normalize common shapes
+    return {
+      recipes: asArray(data?.recipes ?? data?.items ?? data),
+    };
   },
 
-  async saveRecipe(recipe) {
-    const res = await api.post("/recipes", recipe);
-    return unwrap(res);
-  },
-
-  async deleteRecipe(id) {
-    const res = await api.delete(`/recipes/${id}`);
-    return unwrap(res);
-  },
-
-  // ---------- INVENTORY ----------
+  // ---------- Inventory ----------
   async listInventory() {
-    const res = await api.get("/inventory");
-    const data = await unwrap(res);
-    return toArray(data, ["inventory", "items", "data"]);
+    const data = await tryRequest([
+      () => api.get("/inventory"),
+      () => api.get("/items"),
+    ]);
+    return {
+      items: asArray(data?.items ?? data?.inventory ?? data),
+    };
   },
 
-  async addInventory({ name, qty }) {
-    const res = await api.post("/inventory", { name, qty });
-    return unwrap(res);
+  async addInventory(payload) {
+    const data = await tryRequest([
+      () => api.post("/inventory", payload),
+      () => api.post("/items", payload),
+    ]);
+    return data;
   },
 
-  async deleteInventory(id) {
-    const res = await api.delete(`/inventory/${id}`);
-    return unwrap(res);
+  async removeInventory(id) {
+    const data = await tryRequest([
+      () => api.delete(`/inventory/${id}`),
+      () => api.delete(`/items/${id}`),
+    ]);
+    return data;
   },
 
-  // ---------- SHOPPING LIST ----------
+  // ---------- Shopping ----------
   async listShopping() {
-    const res = await api.get("/shopping");
-    const data = await unwrap(res);
-    return toArray(data, ["shopping", "items", "data"]);
+    const data = await tryRequest([
+      () => api.get("/shopping"),
+      () => api.get("/shopping-list"),
+    ]);
+    return {
+      items: asArray(data?.items ?? data?.shopping ?? data),
+    };
   },
 
-  async addShopping({ name, qty }) {
-    const res = await api.post("/shopping", { name, qty });
-    return unwrap(res);
+  async addShopping(payload) {
+    const data = await tryRequest([
+      () => api.post("/shopping", payload),
+      () => api.post("/shopping-list", payload),
+    ]);
+    return data;
   },
 
-  async toggleShopping(id) {
-    const res = await api.patch(`/shopping/${id}/toggle`);
-    return unwrap(res);
-  },
-
-  async deleteShopping(id) {
-    const res = await api.delete(`/shopping/${id}`);
-    return unwrap(res);
+  async removeShopping(id) {
+    const data = await tryRequest([
+      () => api.delete(`/shopping/${id}`),
+      () => api.delete(`/shopping-list/${id}`),
+    ]);
+    return data;
   },
 };
 
