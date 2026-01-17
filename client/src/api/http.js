@@ -2,18 +2,19 @@
 import axios from "axios";
 
 /**
- * If VITE_API_URL is set to https://ai-app-8ale.onrender.com
- * then the API base becomes https://ai-app-8ale.onrender.com/api
+ * Vercel Env Var:
+ *   VITE_API_URL = https://ai-app-8ale.onrender.com
+ * (NO trailing /)
  *
- * If VITE_API_URL is not set, we use "/api" so Vercel rewrites can proxy it.
+ * We will call the backend via /api/* routes.
+ * If VITE_API_URL is set -> https://.../api
+ * Else (local/dev) -> /api  (so vercel.json rewrites can work)
  */
-const raw = import.meta.env.VITE_API_URL;
+const API_ORIGIN = import.meta.env.VITE_API_URL
+  ? String(import.meta.env.VITE_API_URL).replace(/\/+$/, "")
+  : "";
 
-// ensure no trailing slash
-const apiOrigin = raw ? String(raw).replace(/\/+$/, "") : "";
-
-// IMPORTANT: your backend routes are under /api/*
-const baseURL = apiOrigin ? `${apiOrigin}/api` : "/api";
+const baseURL = API_ORIGIN ? `${API_ORIGIN}/api` : "/api";
 
 export const api = axios.create({
   baseURL,

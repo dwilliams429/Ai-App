@@ -4,7 +4,7 @@ import GlassCard from "../components/GlassCard";
 import { useAuth } from "../context/AuthContext";
 
 export default function Signup() {
-  const { signup } = useAuth(); // ✅ MUST be useAuth()
+  const { signup } = useAuth();
   const nav = useNavigate();
 
   const [name, setName] = useState("Demo User 1");

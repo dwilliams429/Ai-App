@@ -9,15 +9,14 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState("");
 
-  // Fetch current session user (safe to call on load)
   async function refreshMe() {
     try {
       const res = await api.get("/auth/me");
-      setUser(res.data?.user || null);
+      setUser(res.data?.user ?? null);
       setAuthError("");
       return res.data;
-    } catch (err) {
-      // Expected before login
+    } catch {
+      // expected when not logged in
       setUser(null);
       return null;
     } finally {
@@ -25,21 +24,10 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // ✅ Accepts an object payload (matches your Login/Signup pages)
   async function signup({ name, email, password }) {
     setAuthError("");
-
-    const safeName = (name ?? "").trim();
-    const safeEmail = (email ?? "").trim();
-    const safePassword = password ?? "";
-
     try {
-      const res = await api.post("/auth/signup", {
-        name: safeName,
-        email: safeEmail,
-        password: safePassword,
-      });
-
+      const res = await api.post("/auth/signup", { name, email, password });
       await refreshMe();
       return res.data;
     } catch (err) {
@@ -49,19 +37,10 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // ✅ Accepts an object payload (matches Login.jsx calling login({ email, password }))
   async function login({ email, password }) {
     setAuthError("");
-
-    const safeEmail = (email ?? "").trim();
-    const safePassword = password ?? "";
-
     try {
-      const res = await api.post("/auth/login", {
-        email: safeEmail,
-        password: safePassword,
-      });
-
+      const res = await api.post("/auth/login", { email, password });
       await refreshMe();
       return res.data;
     } catch (err) {
@@ -75,9 +54,6 @@ export function AuthProvider({ children }) {
     setAuthError("");
     try {
       await api.post("/auth/logout");
-    } catch (err) {
-      // Even if logout fails, clear local user so UI updates
-      console.warn("Logout error:", err?.message || err);
     } finally {
       setUser(null);
     }

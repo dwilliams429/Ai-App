@@ -1,4 +1,3 @@
-// client/src/pages/Login.jsx
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import GlassCard from "../components/GlassCard";
@@ -25,25 +24,18 @@ export default function Login() {
       await login({ email, password });
       nav("/");
     } catch (e2) {
-      setErr(e2?.message || "Login failed");
+      setErr(e2.message || "Login failed");
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <GlassCard
-      title="Login"
-      subtitle="Sign in to access your recipes, inventory, and shopping list."
-    >
+    <GlassCard title="Login" subtitle="Sign in to access your recipes, inventory, and shopping list.">
       <form onSubmit={onSubmit} className="auth-form">
         <label className="field">
           <span className="field__label">Email</span>
-          <input
-            className="field__input"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
+          <input className="field__input" value={email} onChange={(e) => setEmail(e.target.value)} />
         </label>
 
         <label className="field">
