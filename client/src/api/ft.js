@@ -3,7 +3,8 @@ import api from "./http";
 
 /**
  * Try multiple endpoints for the same action.
- * If an endpoint 404s, we try the next one.
+ * - If an endpoint 404s, we try the next one.
+ * - Any other error: throw immediately (401/403/500/etc)
  */
 async function tryRequest(makeRequestFns) {
   let lastErr = null;
@@ -14,17 +15,14 @@ async function tryRequest(makeRequestFns) {
       return res?.data;
     } catch (err) {
       const status = err?.response?.status;
-      // If endpoint doesn't exist, try next
       if (status === 404) {
         lastErr = err;
         continue;
       }
-      // Any other error -> stop immediately (auth, 500, validation, etc)
       throw err;
     }
   }
 
-  // If we got here, everything 404'd
   const msg =
     lastErr?.response?.data?.error ||
     lastErr?.message ||
@@ -36,16 +34,39 @@ function asArray(v) {
   return Array.isArray(v) ? v : [];
 }
 
+function pickArray(data, keys) {
+  for (const k of keys) {
+    const v = data?.[k];
+    if (Array.isArray(v)) return v;
+  }
+  // sometimes API returns the array directly
+  if (Array.isArray(data)) return data;
+  return [];
+}
+
 const ft = {
   // ---------- Recipes ----------
-  async generateRecipe(payload) {
+  async generateRecipe(payload = {}) {
+    // Your Home.jsx sends: { ingredients, diet, timeMinutes }
+    // Your server stub expects: { ingredients, diet, time }
+    const normalized = {
+      ingredients: Array.isArray(payload.ingredients) ? payload.ingredients : [],
+      diet: payload.diet ?? "None",
+      time: Number(payload.timeMinutes ?? payload.time ?? 30) || 30,
+    };
+
+    // NOTE: api baseURL likely already includes "/api"
+    // so these are "/recipes..." not "/api/recipes..."
     const data = await tryRequest([
-      () => api.post("/recipes/generate", payload),
-      () => api.post("/recipe/generate", payload),
-      () => api.post("/ai/recipe", payload),
-      () => api.post("/ai/generate", payload),
-      () => api.post("/generate", payload),
+      () => api.post("/recipes/generate", normalized),
+      () => api.post("/recipes", normalized),
+      () => api.post("/recipe/generate", normalized),
+      () => api.post("/ai/recipe", normalized),
+      () => api.post("/ai/generate", normalized),
+      () => api.post("/generate", normalized),
     ]);
+
+    // Return raw data; Home.jsx already tries multiple shapes safely
     return data;
   },
 
@@ -55,10 +76,9 @@ const ft = {
       () => api.get("/recipe"),
       () => api.get("/saved-recipes"),
     ]);
-    // normalize common shapes
-    return {
-      recipes: asArray(data?.recipes ?? data?.items ?? data),
-    };
+
+    // ✅ IMPORTANT: return an ARRAY because your pages expect an array
+    return pickArray(data, ["recipes", "items", "data"]);
   },
 
   // ---------- Inventory ----------
@@ -67,9 +87,9 @@ const ft = {
       () => api.get("/inventory"),
       () => api.get("/items"),
     ]);
-    return {
-      items: asArray(data?.items ?? data?.inventory ?? data),
-    };
+
+    // ✅ return ARRAY
+    return pickArray(data, ["items", "inventory", "data"]);
   },
 
   async addInventory(payload) {
@@ -94,9 +114,9 @@ const ft = {
       () => api.get("/shopping"),
       () => api.get("/shopping-list"),
     ]);
-    return {
-      items: asArray(data?.items ?? data?.shopping ?? data),
-    };
+
+    // ✅ return ARRAY
+    return pickArray(data, ["items", "shopping", "data"]);
   },
 
   async addShopping(payload) {
