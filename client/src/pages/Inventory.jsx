@@ -15,8 +15,9 @@ export default function Inventory() {
     setErr("");
     setBusy(true);
     try {
-      const list = await ft.listInventory();
-      setItems(Array.isArray(list) ? list : []);
+      const data = await ft.listInventory();
+      const arr = Array.isArray(data?.items) ? data.items : [];
+      setItems(arr);
     } catch (e) {
       setErr(e?.message || "Failed to fetch inventory");
       setItems([]);
@@ -73,7 +74,8 @@ export default function Inventory() {
         </button>
 
         <div style={{ marginTop: 14 }}>
-          {items.length === 0 && !busy ? <div className="muted">No items yet. Add one above.</div> : null}
+          {!busy && items.length === 0 ? <div className="muted">No items yet. Add one above.</div> : null}
+
           {items.map((it, idx) => (
             <div key={it?._id || it?.id || idx} className="list-card" style={{ marginTop: 10 }}>
               <div style={{ fontWeight: 700 }}>{it?.name || it?.item || `Item ${idx + 1}`}</div>

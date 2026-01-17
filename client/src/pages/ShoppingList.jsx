@@ -15,8 +15,9 @@ export default function ShoppingList() {
     setErr("");
     setBusy(true);
     try {
-      const list = await ft.listShopping();
-      setItems(Array.isArray(list) ? list : []);
+      const data = await ft.listShopping();
+      const arr = Array.isArray(data?.items) ? data.items : [];
+      setItems(arr);
     } catch (e) {
       setErr(e?.message || "Failed to fetch");
       setItems([]);
@@ -74,7 +75,8 @@ export default function ShoppingList() {
       </div>
 
       <div style={{ marginTop: 14 }}>
-        {items.length === 0 && !busy ? <div className="muted">No items yet. Add one below.</div> : null}
+        {!busy && items.length === 0 ? <div className="muted">No items yet. Add one below.</div> : null}
+
         {items.map((it, idx) => {
           const label = it?.name || it?.item || `Item ${idx + 1}`;
           return (

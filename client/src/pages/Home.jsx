@@ -28,13 +28,14 @@ export default function Home() {
 
     setBusy(true);
     try {
-      const data = await ft.generateRecipe({
+      const payload = {
         ingredients: cleaned,
-        diet,
+        diet: diet === "None" ? "" : diet,
         timeMinutes: Number(timeMinutes) || 30,
-      });
+      };
 
-      // Support multiple possible response shapes
+      const data = await ft.generateRecipe(payload);
+
       const text =
         data?.recipe?.text ||
         data?.recipe ||

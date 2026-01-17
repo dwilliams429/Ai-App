@@ -12,8 +12,9 @@ export default function Recipes() {
     setErr("");
     setBusy(true);
     try {
-      const list = await ft.listRecipes();
-      setItems(Array.isArray(list) ? list : []);
+      const data = await ft.listRecipes();
+      const arr = Array.isArray(data?.recipes) ? data.recipes : [];
+      setItems(arr);
     } catch (e) {
       setErr(e?.message || "Failed to fetch");
       setItems([]);
@@ -35,7 +36,7 @@ export default function Recipes() {
       </button>
 
       <div style={{ marginTop: 12 }}>
-        {items.length === 0 && !busy ? <div className="muted">No saved recipes yet. Generate one on Home.</div> : null}
+        {!busy && items.length === 0 ? <div className="muted">No saved recipes yet. Generate one on Home.</div> : null}
 
         {items.map((r, idx) => {
           const title = r?.title || r?.name || `Recipe ${idx + 1}`;
