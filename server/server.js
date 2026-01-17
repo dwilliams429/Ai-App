@@ -18,13 +18,17 @@ const app = express();
 // Render sits behind a proxy -> required for secure cookies
 app.set("trust proxy", 1);
 
+// Parsers
+app.use(express.json());
+app.use(cookieParser());
+
 // --------------------
 // ENV helpers
 // --------------------
-const MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URI;
+const MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URI || process.env.MONGODB_URI;
 const SESSION_SECRET = process.env.SESSION_SECRET;
 
-const rawOrigins = process.env.CLIENT_ORIGIN || process.env.CLIENT_ORIGINS || "";
+const rawOrigins = process.env.CLIENT_ORIGIN || process.env.CLIENT_ORIGINS || process.env.CLIENT_ORIGINS || "";
 const allowedOrigins = rawOrigins
   .split(",")
   .map((s) => s.trim())
@@ -33,14 +37,14 @@ const allowedOrigins = rawOrigins
 const isProd = process.env.NODE_ENV === "production";
 
 // --------------------
-// CORS (MUST be before routes)
+// CORS
 // --------------------
 const corsOptions = {
   origin(origin, cb) {
-    // allow server-to-server / curl / same-origin / no-origin requests
+    // allow server-to-server or curl/postman
     if (!origin) return cb(null, true);
 
-    // exact allow list
+    // allow exact list
     if (allowedOrigins.includes(origin)) return cb(null, true);
 
     // allow Vercel preview deployments for your account
@@ -52,35 +56,24 @@ const corsOptions = {
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  allowedHeaders: ["Content-Type", "Authorization"],
 };
 
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
 
 // --------------------
-// Parsers
+// Health
 // --------------------
-app.use(express.json());
-app.use(cookieParser());
-
-// --------------------
-// Health (both paths)
-// --------------------
-function healthPayload() {
-  return {
+app.get("/health", (req, res) => {
+  res.status(200).json({
     ok: true,
     nodeEnv: process.env.NODE_ENV || null,
     hasMongo: Boolean(MONGO_URI),
     hasSessionSecret: Boolean(SESSION_SECRET),
     clientOrigins: allowedOrigins,
-    time: new Date().toISOString(),
-  };
-}
-
-app.get("/", (req, res) => res.status(200).send("OK"));
-app.get("/health", (req, res) => res.status(200).json(healthPayload()));
-app.get("/api/health", (req, res) => res.status(200).json(healthPayload()));
+  });
+});
 
 // --------------------
 // Boot
@@ -121,30 +114,25 @@ async function start() {
 
   // --------------------
   // ROUTES
-  //
-  // IMPORTANT:
-  // Your frontend has been calling BOTH:
-  //   /auth/...      (NO /api prefix)
-  //   /api/auth/...  (WITH /api prefix)
-  //
-  // So we support BOTH to stop the “it works locally but not on Vercel” chaos.
+  // Your client in Vercel hits:
+  //   https://ai-app-8ale.onrender.com/<route>
+  // so we mount BOTH root + /api to avoid mismatches.
   // --------------------
 
-  // Auth
+  // ROOT (production matches your client baseURL = https://ai-app-8ale.onrender.com)
   app.use("/auth", authRoutes);
-  app.use("/api/auth", authRoutes);
-
-  // Inventory
   app.use("/inventory", inventoryRoutes);
-  app.use("/api/inventory", inventoryRoutes);
-
-  // Recipes
   app.use("/recipes", recipesRoutes);
-  app.use("/api/recipes", recipesRoutes);
-
-  // Shopping
   app.use("/shopping", shoppingRoutes);
+
+  // ALSO allow /api/* (local proxy setups, future-proof)
+  app.use("/api/auth", authRoutes);
+  app.use("/api/inventory", inventoryRoutes);
+  app.use("/api/recipes", recipesRoutes);
   app.use("/api/shopping", shoppingRoutes);
+
+  // Root
+  app.get("/", (req, res) => res.status(200).send("OK"));
 
   // error handler
   // eslint-disable-next-line no-unused-vars
