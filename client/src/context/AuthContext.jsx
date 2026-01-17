@@ -1,5 +1,6 @@
+// client/src/context/AuthContext.jsx
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { api } from "../api/http";
+import api from "../api/http";
 
 const AuthContext = createContext(null);
 
@@ -8,17 +9,77 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState("");
 
+  // Fetch current session user (safe to call on load)
   async function refreshMe() {
-    setAuthError("");
     try {
-      const me = await api.me();
-      setUser(me);
-      return me;
-    } catch (e) {
+      const res = await api.get("/auth/me");
+      setUser(res.data?.user || null);
+      setAuthError("");
+      return res.data;
+    } catch (err) {
+      // Expected before login
       setUser(null);
       return null;
     } finally {
       setLoading(false);
+    }
+  }
+
+  // ✅ Accepts an object payload (matches your Login/Signup pages)
+  async function signup({ name, email, password }) {
+    setAuthError("");
+
+    const safeName = (name ?? "").trim();
+    const safeEmail = (email ?? "").trim();
+    const safePassword = password ?? "";
+
+    try {
+      const res = await api.post("/auth/signup", {
+        name: safeName,
+        email: safeEmail,
+        password: safePassword,
+      });
+
+      await refreshMe();
+      return res.data;
+    } catch (err) {
+      const msg = err?.response?.data?.error || err?.message || "Signup failed";
+      setAuthError(msg);
+      throw new Error(msg);
+    }
+  }
+
+  // ✅ Accepts an object payload (matches Login.jsx calling login({ email, password }))
+  async function login({ email, password }) {
+    setAuthError("");
+
+    const safeEmail = (email ?? "").trim();
+    const safePassword = password ?? "";
+
+    try {
+      const res = await api.post("/auth/login", {
+        email: safeEmail,
+        password: safePassword,
+      });
+
+      await refreshMe();
+      return res.data;
+    } catch (err) {
+      const msg = err?.response?.data?.error || err?.message || "Login failed";
+      setAuthError(msg);
+      throw new Error(msg);
+    }
+  }
+
+  async function logout() {
+    setAuthError("");
+    try {
+      await api.post("/auth/logout");
+    } catch (err) {
+      // Even if logout fails, clear local user so UI updates
+      console.warn("Logout error:", err?.message || err);
+    } finally {
+      setUser(null);
     }
   }
 
@@ -27,52 +88,16 @@ export function AuthProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // IMPORTANT: accept an object {email, password}
-  async function login({ email, password }) {
-    setAuthError("");
-    try {
-      const u = await api.login({ email, password });
-      setUser(u);
-      return u;
-    } catch (e) {
-      setUser(null);
-      setAuthError(e?.message || "Login failed");
-      throw e;
-    }
-  }
-
-  // IMPORTANT: accept an object {email, password} (and ignore extra fields safely)
-  async function signup({ email, password }) {
-    setAuthError("");
-    try {
-      const u = await api.signup({ email, password });
-      setUser(u);
-      return u;
-    } catch (e) {
-      setUser(null);
-      setAuthError(e?.message || "Signup failed");
-      throw e;
-    }
-  }
-
-  async function logout() {
-    setAuthError("");
-    try {
-      await api.logout();
-    } finally {
-      setUser(null);
-    }
-  }
-
   const value = useMemo(
     () => ({
       user,
       loading,
       authError,
-      login,
-      signup,
-      logout,
       refreshMe,
+      signup,
+      login,
+      logout,
+      setUser,
     }),
     [user, loading, authError]
   );
@@ -82,6 +107,6 @@ export function AuthProvider({ children }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth() must be used inside <AuthProvider>");
+  if (!ctx) throw new Error("useAuth must be used inside <AuthProvider>");
   return ctx;
 }
