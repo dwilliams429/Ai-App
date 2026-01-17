@@ -2,101 +2,44 @@
 import api from "./http";
 
 /**
- * A single "feature tools" object used by pages/components.
- * Your UI expects methods like:
- *  - ft.generateRecipe()
- *  - ft.listRecipes()
- *  - ft.listInventory()
- *  - ft.listShopping()
+ * This file exports BOTH:
+ *  - named functions (generateRecipe, listRecipes, ...)
+ *  - default object "ft" with those functions
  *
- * These hit your backend through axios instance `api`,
- * which already includes baseURL and credentials.
+ * So your pages will work whether they import:
+ *   import ft from "../api/ft";
+ * OR
+ *   import * as ft from "../api/ft";
  */
 
-// -----------------------
-// Recipes
-// -----------------------
-async function generateRecipe({ ingredients = [], diet = "None", time = 30 }) {
-  // Preferred: POST /api/recipes (matches your server/index.mjs demo route)
-  // If your real routes differ, we'll adjust after we see network calls.
-  const res = await api.post("/recipes", { ingredients, diet, time });
+// ---- Named exports ----
+
+export async function generateRecipe(payload) {
+  const res = await api.post("/recipes/generate", payload);
   return res.data;
 }
 
-async function listRecipes() {
+export async function listRecipes() {
   const res = await api.get("/recipes");
   return res.data;
 }
 
-// Optional helpers if your backend supports them later
-async function saveRecipe(payload) {
-  const res = await api.post("/recipes/save", payload);
-  return res.data;
-}
-
-async function deleteRecipe(id) {
-  const res = await api.delete(`/recipes/${id}`);
-  return res.data;
-}
-
-// -----------------------
-// Inventory
-// -----------------------
-async function listInventory() {
+export async function listInventory() {
   const res = await api.get("/inventory");
   return res.data;
 }
 
-async function addInventoryItem(payload) {
-  const res = await api.post("/inventory", payload);
-  return res.data;
-}
-
-async function removeInventoryItem(id) {
-  const res = await api.delete(`/inventory/${id}`);
-  return res.data;
-}
-
-// -----------------------
-// Shopping
-// -----------------------
-async function listShopping() {
+export async function listShopping() {
   const res = await api.get("/shopping");
   return res.data;
 }
 
-async function addShoppingItem(payload) {
-  const res = await api.post("/shopping", payload);
-  return res.data;
-}
-
-async function updateShoppingItem(id, payload) {
-  const res = await api.patch(`/shopping/${id}`, payload);
-  return res.data;
-}
-
-async function removeShoppingItem(id) {
-  const res = await api.delete(`/shopping/${id}`);
-  return res.data;
-}
-
+// ---- Default export (object) ----
 const ft = {
-  // recipes
   generateRecipe,
   listRecipes,
-  saveRecipe,
-  deleteRecipe,
-
-  // inventory
   listInventory,
-  addInventoryItem,
-  removeInventoryItem,
-
-  // shopping
   listShopping,
-  addShoppingItem,
-  updateShoppingItem,
-  removeShoppingItem,
 };
 
 export default ft;
