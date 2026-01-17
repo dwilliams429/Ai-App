@@ -7,8 +7,8 @@ export default function Login() {
   const { login } = useAuth();
   const nav = useNavigate();
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("demo1@demo.com");
+  const [password, setPassword] = useState("Demo123456!");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -21,7 +21,7 @@ export default function Login() {
 
     setBusy(true);
     try {
-      await login({ email, password }); // ✅ matches AuthContext.login(payload)
+      await login({ email, password });
       nav("/");
     } catch (e2) {
       setErr(e2.message || "Login failed");

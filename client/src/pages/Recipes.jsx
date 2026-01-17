@@ -1,17 +1,24 @@
+// client/src/pages/Recipes.jsx
 import React, { useEffect, useState } from "react";
+import GlassCard from "../components/GlassCard";
 import ft from "../api/ft";
 
 export default function Recipes() {
-  const [recipes, setRecipes] = useState([]);
-  const [error, setError] = useState("");
+  const [items, setItems] = useState([]);
+  const [busy, setBusy] = useState(true);
+  const [err, setErr] = useState("");
 
   async function load() {
-    setError("");
+    setErr("");
+    setBusy(true);
     try {
-      const data = await ft.listRecipes();
-      setRecipes(data || []);
-    } catch {
-      setError("Failed to fetch recipes");
+      const list = await ft.listRecipes();
+      setItems(Array.isArray(list) ? list : []);
+    } catch (e) {
+      setErr(e?.message || "Failed to fetch");
+      setItems([]);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -20,15 +27,27 @@ export default function Recipes() {
   }, []);
 
   return (
-    <div className="page">
-      <h1>Recipes</h1>
-      {error && <div className="error-banner">⚠️ {error}</div>}
-      {recipes.length === 0 && <p>No saved recipes yet.</p>}
-      <ul>
-        {recipes.map(r => (
-          <li key={r._id || r.title}>{r.title}</li>
-        ))}
-      </ul>
-    </div>
+    <GlassCard title="Recipes" subtitle="Your saved recipes live here. Generate recipes on Home.">
+      {err ? <div className="error-banner">⚠️ {err}</div> : null}
+
+      <button className="small-btn" onClick={load} disabled={busy} style={{ marginTop: 10 }}>
+        {busy ? "Loading..." : "Refresh"}
+      </button>
+
+      <div style={{ marginTop: 12 }}>
+        {items.length === 0 && !busy ? <div className="muted">No saved recipes yet. Generate one on Home.</div> : null}
+
+        {items.map((r, idx) => {
+          const title = r?.title || r?.name || `Recipe ${idx + 1}`;
+          const body = r?.text || r?.recipe || r?.content || "";
+          return (
+            <div key={r?._id || r?.id || idx} className="list-card" style={{ marginTop: 12 }}>
+              <div style={{ fontWeight: 700 }}>{title}</div>
+              {body ? <div className="muted" style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>{body}</div> : null}
+            </div>
+          );
+        })}
+      </div>
+    </GlassCard>
   );
 }

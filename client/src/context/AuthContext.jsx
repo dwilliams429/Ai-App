@@ -1,3 +1,4 @@
+// client/src/context/AuthContext.jsx
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import api from "../api/http";
 
@@ -59,6 +60,7 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     refreshMe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const value = useMemo(
