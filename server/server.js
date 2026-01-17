@@ -18,10 +18,6 @@ const app = express();
 // Render sits behind a proxy -> required for secure cookies
 app.set("trust proxy", 1);
 
-// Parsers
-app.use(express.json());
-app.use(cookieParser());
-
 // --------------------
 // ENV helpers
 // --------------------
@@ -37,12 +33,14 @@ const allowedOrigins = rawOrigins
 const isProd = process.env.NODE_ENV === "production";
 
 // --------------------
-// CORS
+// CORS (MUST be before routes)
 // --------------------
 const corsOptions = {
   origin(origin, cb) {
+    // allow server-to-server / curl / same-origin / no-origin requests
     if (!origin) return cb(null, true);
 
+    // exact allow list
     if (allowedOrigins.includes(origin)) return cb(null, true);
 
     // allow Vercel preview deployments for your account
@@ -54,24 +52,35 @@ const corsOptions = {
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
 };
 
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
 
 // --------------------
-// Health
+// Parsers
 // --------------------
-app.get("/health", (req, res) => {
-  res.status(200).json({
+app.use(express.json());
+app.use(cookieParser());
+
+// --------------------
+// Health (both paths)
+// --------------------
+function healthPayload() {
+  return {
     ok: true,
     nodeEnv: process.env.NODE_ENV || null,
     hasMongo: Boolean(MONGO_URI),
     hasSessionSecret: Boolean(SESSION_SECRET),
     clientOrigins: allowedOrigins,
-  });
-});
+    time: new Date().toISOString(),
+  };
+}
+
+app.get("/", (req, res) => res.status(200).send("OK"));
+app.get("/health", (req, res) => res.status(200).json(healthPayload()));
+app.get("/api/health", (req, res) => res.status(200).json(healthPayload()));
 
 // --------------------
 // Boot
@@ -103,9 +112,6 @@ async function start() {
       }),
       cookie: {
         httpOnly: true,
-
-        // ✅ prod: Vercel->Render is cross-site https, so None+Secure
-        // ✅ dev: localhost is http, so Lax + not secure
         sameSite: isProd ? "none" : "lax",
         secure: isProd,
         maxAge: 1000 * 60 * 60 * 24 * 7,
@@ -113,14 +119,32 @@ async function start() {
     })
   );
 
+  // --------------------
   // ROUTES
+  //
+  // IMPORTANT:
+  // Your frontend has been calling BOTH:
+  //   /auth/...      (NO /api prefix)
+  //   /api/auth/...  (WITH /api prefix)
+  //
+  // So we support BOTH to stop the “it works locally but not on Vercel” chaos.
+  // --------------------
+
+  // Auth
+  app.use("/auth", authRoutes);
   app.use("/api/auth", authRoutes);
-app.use("/api/inventory", inventoryRoutes);
-app.use("/api/recipes", recipesRoutes);
-app.use("/api/shopping", shoppingRoutes);
 
+  // Inventory
+  app.use("/inventory", inventoryRoutes);
+  app.use("/api/inventory", inventoryRoutes);
 
-  app.get("/", (req, res) => res.status(200).send("OK"));
+  // Recipes
+  app.use("/recipes", recipesRoutes);
+  app.use("/api/recipes", recipesRoutes);
+
+  // Shopping
+  app.use("/shopping", shoppingRoutes);
+  app.use("/api/shopping", shoppingRoutes);
 
   // error handler
   // eslint-disable-next-line no-unused-vars
