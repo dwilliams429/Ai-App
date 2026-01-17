@@ -2,36 +2,41 @@
 import api from "./http";
 
 /**
- * This file exports BOTH:
- *  - named functions (generateRecipe, listRecipes, ...)
- *  - default object "ft" with those functions
- *
- * So your pages will work whether they import:
- *   import ft from "../api/ft";
- * OR
- *   import * as ft from "../api/ft";
+ * Normalize backend responses so the UI never crashes.
+ * Your UI pages expect arrays (they call .map()).
+ * But servers often return objects like { recipes: [...] }.
  */
+function pickArray(data, keys = []) {
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === "object") {
+    for (const k of keys) {
+      if (Array.isArray(data[k])) return data[k];
+    }
+  }
+  return []; // safe default
+}
 
 // ---- Named exports ----
 
 export async function generateRecipe(payload) {
+  // Keep full object; Home page usually reads properties off this
   const res = await api.post("/recipes/generate", payload);
   return res.data;
 }
 
 export async function listRecipes() {
   const res = await api.get("/recipes");
-  return res.data;
+  return pickArray(res.data, ["recipes", "items", "data", "results"]);
 }
 
 export async function listInventory() {
   const res = await api.get("/inventory");
-  return res.data;
+  return pickArray(res.data, ["inventory", "items", "data", "results"]);
 }
 
 export async function listShopping() {
   const res = await api.get("/shopping");
-  return res.data;
+  return pickArray(res.data, ["shopping", "items", "data", "results"]);
 }
 
 // ---- Default export (object) ----
