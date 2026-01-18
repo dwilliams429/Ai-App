@@ -12,11 +12,11 @@ export default function Recipes() {
     setErr("");
     setBusy(true);
     try {
-      const data = await ft.listRecipes();
-      const arr = Array.isArray(data?.recipes) ? data.recipes : [];
-      setItems(arr);
+      // ft.listRecipes() returns an ARRAY (see client/src/api/ft.js)
+      const arr = await ft.listRecipes();
+      setItems(Array.isArray(arr) ? arr : []);
     } catch (e) {
-      setErr(e?.message || "Failed to fetch");
+      setErr(e?.response?.data?.error || e?.message || "Failed to fetch");
       setItems([]);
     } finally {
       setBusy(false);
@@ -36,15 +36,29 @@ export default function Recipes() {
       </button>
 
       <div style={{ marginTop: 12 }}>
-        {!busy && items.length === 0 ? <div className="muted">No saved recipes yet. Generate one on Home.</div> : null}
+        {!busy && items.length === 0 ? (
+          <div className="muted">No saved recipes yet. Generate one on Home.</div>
+        ) : null}
 
         {items.map((r, idx) => {
           const title = r?.title || r?.name || `Recipe ${idx + 1}`;
-          const body = r?.text || r?.recipe || r?.content || "";
+
+          // Your server model uses `text` as the pretty formatted recipe.
+          // Keep a couple fallbacks just in case.
+          const body =
+            r?.text ||
+            (typeof r?.recipe === "string" ? r.recipe : "") ||
+            r?.content ||
+            "";
+
           return (
             <div key={r?._id || r?.id || idx} className="list-card" style={{ marginTop: 12 }}>
               <div style={{ fontWeight: 700 }}>{title}</div>
-              {body ? <div className="muted" style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>{body}</div> : null}
+              {body ? (
+                <div className="muted" style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>
+                  {body}
+                </div>
+              ) : null}
             </div>
           );
         })}
