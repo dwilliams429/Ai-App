@@ -2,6 +2,7 @@
 "use strict";
 
 const express = require("express");
+const mongoose = require("mongoose");
 const router = express.Router();
 
 const { generateBetterRecipe } = require("../services/aiRecipe");
@@ -15,6 +16,7 @@ function stripBullets(line) {
   return String(line || "").replace(/^\s*[-•]\s*/, "").trim();
 }
 
+// Also returns a safe text string for the client UI
 function toTextFromRecipeStruct(recipe) {
   const title = recipe?.title || "Recipe";
   const meta = recipe?.meta || {};
@@ -30,14 +32,10 @@ function toTextFromRecipeStruct(recipe) {
     .filter(Boolean);
 
   const ingredientsBlock =
-    ingredientsLines.length > 0
-      ? ingredientsLines.map((x) => `- ${x}`).join("\n")
-      : "- (none)";
+    ingredientsLines.length > 0 ? ingredientsLines.map((x) => `- ${x}`).join("\n") : "- (none)";
 
   const stepsBlock =
-    stepsLines.length > 0
-      ? stepsLines.map((s, i) => `${i + 1}. ${s}`).join("\n")
-      : "1. (none)";
+    stepsLines.length > 0 ? stepsLines.map((s, i) => `${i + 1}. ${s}`).join("\n") : "1. (none)";
 
   return `${title}
 Diet: ${diet}  •  Time: ${timeMinutes} min
@@ -51,13 +49,15 @@ ${stepsBlock}
 }
 
 /**
- * POST /recipes/generate   (also works at /api/recipes/generate because of server.js mounts)
+ * POST /recipes/generate   (also works at /api/recipes/generate due to mounts)
  * Body: { ingredients: string[] | string, diet?: string, timeMinutes?: number, time?: number }
+ *
+ * Response:
+ * { text, title, meta, recipe, saved, usedAI, modelUsed }
  */
 router.post("/generate", async (req, res) => {
   try {
     const body = req.body || {};
-
     const ingredientsRaw = body.ingredients ?? "";
     const diet = String(body.diet || "None");
     const timeMinutes = Number(body.timeMinutes ?? body.time ?? 30) || 30;
@@ -81,6 +81,7 @@ router.post("/generate", async (req, res) => {
       text,
       meta: { diet, timeMinutes },
       recipe: recipe || {},
+      favorite: false,
     });
 
     return res.json({
@@ -88,6 +89,7 @@ router.post("/generate", async (req, res) => {
       text: doc.text,
       meta: doc.meta,
       recipe: doc.recipe,
+      favorite: doc.favorite,
       saved: { _id: doc._id, createdAt: doc.createdAt },
       usedAI: Boolean(result?.usedAI),
       modelUsed: result?.modelUsed || null,
@@ -99,16 +101,12 @@ router.post("/generate", async (req, res) => {
 });
 
 /**
- * GET /recipes
- * Returns { recipes: [...] }
+ * GET /recipes  (also /api/recipes)
+ * Returns: { recipes: [...] }
  */
 router.get("/", async (req, res) => {
   try {
-    const recipes = await Recipe.find({})
-      .sort({ createdAt: -1 })
-      .limit(100)
-      .lean();
-
+    const recipes = await Recipe.find({}).sort({ createdAt: -1 }).limit(200).lean();
     return res.json({ recipes });
   } catch (err) {
     console.error("❌ /recipes GET error:", err?.message || err);
@@ -118,18 +116,54 @@ router.get("/", async (req, res) => {
 
 /**
  * GET /recipes/:id
- * Returns { recipe: {...} }
  */
 router.get("/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const recipe = await Recipe.findById(id).lean();
+    if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ error: "Invalid id" });
 
-    if (!recipe) return res.status(404).json({ error: "Recipe not found" });
+    const doc = await Recipe.findById(id).lean();
+    if (!doc) return res.status(404).json({ error: "Not found" });
 
-    return res.json({ recipe });
+    return res.json({ recipe: doc });
   } catch (err) {
-    console.error("❌ /recipes/:id GET error:", err?.message || err);
+    return res.status(500).json({ error: err?.message || "Server error" });
+  }
+});
+
+/**
+ * DELETE /recipes/:id
+ */
+router.delete("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ error: "Invalid id" });
+
+    const doc = await Recipe.findByIdAndDelete(id).lean();
+    if (!doc) return res.status(404).json({ error: "Not found" });
+
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ error: err?.message || "Server error" });
+  }
+});
+
+/**
+ * PATCH /recipes/:id/favorite
+ * Body: { favorite: boolean }
+ */
+router.patch("/:id/favorite", async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ error: "Invalid id" });
+
+    const favorite = Boolean(req.body?.favorite);
+
+    const doc = await Recipe.findByIdAndUpdate(id, { favorite }, { new: true }).lean();
+    if (!doc) return res.status(404).json({ error: "Not found" });
+
+    return res.json({ recipe: doc });
+  } catch (err) {
     return res.status(500).json({ error: err?.message || "Server error" });
   }
 });

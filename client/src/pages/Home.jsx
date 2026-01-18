@@ -11,10 +11,12 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [recipeText, setRecipeText] = useState("");
+  const [savedId, setSavedId] = useState("");
 
   async function onGenerate() {
     setErr("");
     setRecipeText("");
+    setSavedId("");
 
     const cleaned = ingredients
       .split(",")
@@ -40,8 +42,12 @@ export default function Home() {
 
       setRecipeText(data.text);
 
-      // ✅ Let Recipes page auto-refresh after save
+      const id = data?.saved?._id || "";
+      if (id) setSavedId(id);
+
+      // ✅ notify Recipes page
       localStorage.setItem("recipes:lastSavedAt", String(Date.now()));
+      window.dispatchEvent(new Event("recipes:saved"));
     } catch (e) {
       setErr(e?.message || "Failed to generate recipe");
     } finally {
@@ -52,7 +58,7 @@ export default function Home() {
   return (
     <GlassCard
       title="Featured Recipe"
-      subtitle="Generate a better recipe from your ingredients + your saved inventory. Missing items auto-add to Shopping List."
+      subtitle="Generate a recipe from your ingredients. It auto-saves to Recipes."
     >
       {err ? <div className="error-banner">⚠️ {err}</div> : null}
 
@@ -91,6 +97,8 @@ export default function Home() {
       <button className="big-btn" style={{ marginTop: 14 }} disabled={busy} onClick={onGenerate}>
         {busy ? "Generating..." : "Generate"}
       </button>
+
+      {savedId ? <div className="muted" style={{ marginTop: 10 }}>Saved ✅</div> : null}
 
       {recipeText ? (
         <pre style={{ marginTop: 16, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>

@@ -11,10 +11,17 @@ const RecipeSchema = new mongoose.Schema(
       diet: { type: String, default: "None" },
       timeMinutes: { type: Number, default: 30 },
     },
-    // optional structured version for future UI
-    recipe: { type: Object, default: {} },
 
-    // optional: if you later have users
+    // structured version for UI (ingredients + steps)
+    recipe: {
+      type: Object,
+      default: {},
+    },
+
+    // user features
+    favorite: { type: Boolean, default: false },
+
+    // optional later
     userId: { type: mongoose.Schema.Types.ObjectId, required: false },
   },
   { timestamps: true }

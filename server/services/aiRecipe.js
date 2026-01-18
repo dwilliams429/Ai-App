@@ -3,15 +3,14 @@
 
 /**
  * generateBetterRecipe()
- * - Works EVEN if @google/generative-ai is not installed
- * - Works EVEN if GEMINI_API_KEY is missing or Gemini errors
- * - Produces more descriptive steps + includes quantities
- * - Avoids "salt/pepper/oil" for PB&J and other non-savory recipes
- * - Uses smarter entrée titles so you don't get "Bowl" when you didn't ask for one
+ * - NEVER throws if Gemini fails (prevents 500s from Gemini issues)
+ * - Works even if @google/generative-ai isn't installed
+ * - Provides quantities + more descriptive steps
+ * - Avoids salt/pepper/oil for PB&J and other non-savory recipes
  */
 
 function normalizeList(input) {
-  if (Array.isArray(input)) return input.map(String);
+  if (Array.isArray(input)) return input.map(String).map((s) => s.trim()).filter(Boolean);
   if (typeof input === "string") {
     return input
       .split(",")
@@ -25,49 +24,32 @@ function lower(s) {
   return String(s || "").toLowerCase();
 }
 
-function includesAny(haystack, needles) {
-  const h = lower(haystack);
-  return needles.some((n) => h.includes(lower(n)));
+function includesAny(text, needles) {
+  const t = lower(text);
+  return needles.some((n) => t.includes(lower(n)));
 }
 
-function titleFrom(ingredients, diet) {
-  const main = (ingredients[0] || "Recipe").trim();
-  const prefix = diet && diet !== "None" ? `${diet} ` : "";
-  return `${prefix}${main.charAt(0).toUpperCase()}${main.slice(1)}`;
-}
-
-// Keep this classification focused on “special types” only.
-// The entrée vs bowl decision is handled later using presence of a base.
 function classifyRecipe(ingredients) {
-  const text = ingredients.map((x) => lower(x)).join(" ");
+  const joined = ingredients.map((x) => lower(x)).join(" ");
 
-  const hasBread = includesAny(text, ["bread", "bun", "bagel", "tortilla", "wrap"]);
-  const hasPb = includesAny(text, ["peanut butter", "almond butter", "sunflower butter", "pb"]);
-  const hasJelly = includesAny(text, ["jelly", "jam", "preserves"]);
+  const hasBread = includesAny(joined, ["bread", "bun", "bagel", "tortilla", "wrap"]);
+  const hasPb = includesAny(joined, ["peanut butter", "almond butter", "sunflower butter", "pb"]);
+  const hasJelly = includesAny(joined, ["jelly", "jam", "preserves"]);
+  const hasFruit = includesAny(joined, ["banana", "strawberry", "blueberry", "apple", "grape", "mango", "pineapple"]);
+  const hasYogurtMilk = includesAny(joined, ["milk", "yogurt", "kefir", "whey", "protein"]);
+  const hasLeafy = includesAny(joined, ["lettuce", "spinach", "kale", "arugula"]);
+  const hasPastaRice = includesAny(joined, ["pasta", "spaghetti", "penne", "rice", "noodle", "ramen", "quinoa", "couscous"]);
+  const hasEgg = includesAny(joined, ["egg", "eggs"]);
+  const hasCheese = includesAny(joined, ["cheese", "cheddar", "mozzarella", "parmesan", "feta"]);
+  const hasMeat = includesAny(joined, ["chicken", "beef", "steak", "turkey", "pork", "lamb", "salmon", "shrimp", "tuna"]);
+  const hasBeans = includesAny(joined, ["beans", "chickpeas", "lentils", "black beans"]);
 
-  const hasFruit = includesAny(text, ["banana", "strawberry", "blueberry", "mango", "pineapple", "apple", "grape", "berries"]);
-  const hasYogurtMilk = includesAny(text, ["milk", "yogurt", "kefir", "protein", "whey"]);
-
-  const hasEgg = includesAny(text, ["egg", "eggs"]);
-  const hasCheese = includesAny(text, ["cheese", "cheddar", "mozzarella", "parmesan", "feta"]);
-
-  const hasLeafy = includesAny(text, ["lettuce", "spinach", "kale", "arugula"]);
-  const hasMeat = includesAny(text, ["chicken", "beef", "steak", "turkey", "pork", "lamb", "salmon", "shrimp", "tuna"]);
-  const hasBeans = includesAny(text, ["beans", "chickpeas", "lentils", "black beans"]);
-
-  // PB&J / nut-butter sandwich
   if (hasBread && hasPb && hasJelly) return "pbj";
-
-  // Smoothie-ish
   if (hasFruit && hasYogurtMilk) return "smoothie";
-
-  // Salad-ish
   if (hasLeafy && (hasCheese || hasBeans || hasMeat)) return "salad";
-
-  // Breakfast-ish
+  if (hasPastaRice) return "bowl";
   if (hasEgg && (hasBread || hasCheese)) return "breakfast";
 
-  // Default
   return "savory";
 }
 
@@ -76,368 +58,157 @@ function titleCase(s) {
     .trim()
     .replace(/\s+/g, " ")
     .split(" ")
-    .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
+    .filter(Boolean)
+    .map((w) => w[0].toUpperCase() + w.slice(1))
     .join(" ");
 }
 
-function pickFirstMatching(canon, candidates) {
-  return canon.find((x) => candidates.some((c) => includesAny(x, [c]))) || "";
-}
+function buildFallbackRecipe({ ingredients, diet = "None", timeMinutes = 30 }) {
+  const canon = normalizeList(ingredients);
+  const kind = classifyRecipe(canon);
 
-function pickVeg(canon) {
-  return canon.filter((x) =>
-    includesAny(x, [
-      "asparagus",
-      "broccoli",
-      "spinach",
-      "kale",
-      "pepper",
-      "peppers",
-      "onion",
-      "mushroom",
-      "mushrooms",
-      "zucchini",
-      "tomato",
-      "tomatoes",
-      "carrot",
-      "carrots",
-      "green bean",
-      "green beans",
-      "brussels",
-      "cauliflower",
-    ])
-  );
-}
+  const meta = { diet, timeMinutes: Number(timeMinutes) || 30 };
 
-function smartEntreeTitle(canon) {
-  const protein =
-    pickFirstMatching(canon, [
-      "lamb chops",
-      "lamb",
-      "chops",
-      "steak",
-      "salmon",
-      "shrimp",
-      "chicken",
-      "pork",
-      "tofu",
-      "beans",
-      "turkey",
-      "tuna",
-    ]) || "Protein";
-
-  const hasLemon = canon.some((x) => includesAny(x, ["lemon"]));
-  const hasSoy = canon.some((x) => includesAny(x, ["soy", "teriyaki"]));
-  const hasGarlic = canon.some((x) => includesAny(x, ["garlic"]));
-  const hasCream = canon.some((x) => includesAny(x, ["cream", "heavy whipping cream"]));
-  const hasHoney = canon.some((x) => includesAny(x, ["honey"]));
-  const hasSpicy = canon.some((x) => includesAny(x, ["chili", "sriracha", "hot sauce", "pepper flakes"]));
-
-  const veg = pickVeg(canon);
-  const vegMain = veg[0] ? titleCase(veg[0]) : "";
-
-  let flavorBits = [];
-
-  if (hasCream && hasLemon) flavorBits.push("Creamy Lemon");
-  else if (hasCream) flavorBits.push("Creamy");
-  else if (hasLemon) flavorBits.push("Lemon");
-
-  if (hasHoney && hasSoy) flavorBits.push("Honey-Soy");
-  else if (hasSoy) flavorBits.push("Soy");
-
-  if (hasGarlic) flavorBits.push("Garlic");
-  if (hasSpicy) flavorBits.push("Spicy");
-
-  flavorBits = Array.from(new Set(flavorBits)).filter(Boolean);
-
-  const proteinNice = titleCase(
-    protein.includes("chops")
-      ? "Lamb Chops"
-      : protein.includes("lamb")
-      ? "Lamb"
-      : protein.includes("steak")
-      ? "Steak"
-      : protein.includes("salmon")
-      ? "Salmon"
-      : protein.includes("shrimp")
-      ? "Shrimp"
-      : protein.includes("chicken")
-      ? "Chicken"
-      : protein.includes("pork")
-      ? "Pork"
-      : protein.includes("tofu")
-      ? "Tofu"
-      : protein.includes("beans")
-      ? "Beans"
-      : protein.includes("turkey")
-      ? "Turkey"
-      : protein.includes("tuna")
-      ? "Tuna"
-      : protein
-  );
-
-  const left = flavorBits.length ? `${flavorBits.join(" ")} ${proteinNice}` : proteinNice;
-  const right = vegMain ? `with ${vegMain}` : "";
-
-  return `${left}${right ? " " + right : ""}`.trim();
-}
-
-function guessProteinQty(canon) {
-  const t = canon.join(" ").toLowerCase();
-  if (t.includes("shrimp")) return "8–10 oz shrimp (peeled)";
-  if (t.includes("salmon")) return "1 salmon fillet (6–8 oz)";
-  if (t.includes("steak") || t.includes("beef")) return "1 steak (6–8 oz)";
-  if (t.includes("lamb")) return "2–4 lamb chops (about 6–10 oz total)";
-  if (t.includes("chicken")) return "1 chicken breast (6–8 oz) or 2 thighs";
-  if (t.includes("pork")) return "1 pork chop (6–8 oz)";
-  if (t.includes("tofu")) return "1 block tofu (14 oz), pressed and cubed";
-  if (t.includes("beans") || t.includes("lentil") || t.includes("chickpea")) return "1 can beans (15 oz), rinsed";
-  return "6–8 oz protein (meat/fish) OR 1 block tofu OR 1 can beans";
-}
-
-function guessBaseQty(canon) {
-  const t = canon.join(" ").toLowerCase();
-  if (t.includes("rice")) return "1 cup cooked rice (or 1/2 cup dry)";
-  if (t.includes("pasta")) return "2 cups cooked pasta (or 4 oz dry)";
-  if (t.includes("noodle") || t.includes("ramen")) return "1 serving noodles (per package)";
-  if (t.includes("quinoa")) return "1 cup cooked quinoa (or 1/2 cup dry)";
-  if (t.includes("couscous")) return "1 cup cooked couscous (or 1/2 cup dry)";
-  if (t.includes("tortilla") || t.includes("wrap")) return "2 tortillas/wraps";
-  return "1 cup cooked base (rice/pasta/noodles) if desired";
-}
-
-function detectHasBase(canon) {
-  return canon.some((x) =>
-    includesAny(x, ["rice", "pasta", "noodle", "ramen", "quinoa", "couscous", "tortilla", "wrap", "bread", "bun", "bagel"])
-  );
-}
-
-function detectLooksLikeSauce(canon) {
-  return canon.some((x) => includesAny(x, ["soy", "teriyaki", "sauce", "lemon", "garlic", "honey", "vinegar", "mustard", "bbq"]));
-}
-
-function buildFallbackRecipe({ ingredients, diet, timeMinutes }) {
-  const list = normalizeList(ingredients);
-  const kind = classifyRecipe(list);
-  const titleBase = titleFrom(list, diet);
-
-  const meta = { diet: diet || "None", timeMinutes: Number(timeMinutes) || 30 };
-
-  // canonical ingredient list (as user typed)
-  const canon = list.map((x) => x.trim()).filter(Boolean);
-
-  // --- PB&J ---
+  // PB&J
   if (kind === "pbj") {
-    const bread = canon.find((x) => includesAny(x, ["bread", "bun", "bagel", "tortilla", "wrap"])) || "bread";
-    const pb = canon.find((x) => includesAny(x, ["peanut butter", "almond butter", "sunflower butter", "pb"])) || "peanut butter";
-    const jelly = canon.find((x) => includesAny(x, ["jelly", "jam", "preserves"])) || "jelly";
-
     const title = "PB&J Sandwich";
 
     const ingredientsOut = [
-      `2 slices ${bread}`,
-      `2 tbsp ${pb}`,
-      `1–2 tbsp ${jelly}`,
+      "2 slices bread",
+      "2 tbsp peanut butter (or nut/seed butter)",
+      "1–2 tbsp jelly/jam/preserves",
     ];
 
     if (canon.some((x) => includesAny(x, ["banana"]))) ingredientsOut.push("1/2 banana, sliced (optional)");
     if (canon.some((x) => includesAny(x, ["honey"]))) ingredientsOut.push("1 tsp honey (optional)");
-    if (canon.some((x) => includesAny(x, ["butter"]))) ingredientsOut.push("1 tsp butter (optional, for toasting)");
 
     const steps = [
-      "Optional: toast the bread lightly (30–90 seconds) so it stays sturdy.",
-      "Spread peanut butter edge-to-edge on one slice (this prevents the jelly from soaking in).",
-      "Spread jelly/jam on the other slice. If using banana or honey, add it on top of the peanut butter.",
+      "Lay out the bread slices. If you want it warm, toast the bread lightly (optional).",
+      "Spread peanut butter evenly on one slice (edge to edge so it acts as a moisture barrier).",
+      "Spread jelly/jam on the other slice. Add banana/honey if using.",
       "Close the sandwich, press gently, slice in half, and serve.",
     ];
 
     return { recipe: { title, ingredients: ingredientsOut, steps, meta }, usedAI: false, modelUsed: null };
   }
 
-  // --- Smoothie ---
+  // Smoothie
   if (kind === "smoothie") {
-    const title = `${titleBase} Smoothie`;
-    const ingredientsOut = [];
-
-    const fruit = canon.filter((x) => includesAny(x, ["banana", "strawberry", "blueberry", "mango", "pineapple", "apple", "berries"]));
+    const title = "Fruit Smoothie";
+    const fruit = canon.filter((x) => includesAny(x, ["banana", "strawberry", "blueberry", "mango", "pineapple", "berries", "apple"]));
     const dairy = canon.find((x) => includesAny(x, ["milk", "yogurt", "kefir"])) || "milk";
 
-    if (fruit.length) {
-      ingredientsOut.push(`1 cup ${fruit[0]} (fresh or frozen)`);
-      if (fruit[1]) ingredientsOut.push(`1/2 cup ${fruit[1]} (fresh or frozen)`);
-    } else {
-      ingredientsOut.push("1 cup mixed fruit (fresh or frozen)");
-    }
-
-    ingredientsOut.push(`3/4 cup ${dairy}`);
-    ingredientsOut.push("1/2 cup ice (optional, for thicker smoothie)");
+    const ingredientsOut = [
+      fruit[0] ? `1 cup ${fruit[0]} (fresh or frozen)` : "1 cup mixed fruit (fresh or frozen)",
+      fruit[1] ? `1/2 cup ${fruit[1]} (fresh or frozen)` : null,
+      `3/4 cup ${dairy}`,
+      "1/2 cup ice (optional, thicker smoothie)",
+    ].filter(Boolean);
 
     if (canon.some((x) => includesAny(x, ["protein", "whey"]))) ingredientsOut.push("1 scoop protein powder (optional)");
     if (canon.some((x) => includesAny(x, ["peanut butter", "almond butter"]))) ingredientsOut.push("1 tbsp nut butter (optional)");
 
     const steps = [
-      "Add the liquid to the blender first (helps it blend smoothly).",
-      "Add fruit + any add-ins. Add ice last if using.",
-      "Blend 30–60 seconds until silky smooth. If too thick, add 1–2 tbsp liquid at a time. If too thin, add more frozen fruit/ice.",
-      "Taste and adjust. Pour immediately and serve.",
+      "Add liquid to blender first (helps blades catch).",
+      "Add fruit and any add-ins. Add ice last if using.",
+      "Blend 30–60 seconds until smooth. If too thick, add a splash of liquid; if too thin, add more ice/frozen fruit.",
+      "Taste and adjust sweetness (more fruit or a drizzle of honey). Serve immediately.",
     ];
 
     return { recipe: { title, ingredients: ingredientsOut, steps, meta }, usedAI: false, modelUsed: null };
   }
 
-  // --- Salad ---
+  // Salad
   if (kind === "salad") {
-    const title = `${titleBase} Salad`;
-
-    const greens = canon.find((x) => includesAny(x, ["lettuce", "spinach", "kale", "arugula"])) || "leafy greens";
-    const protein = canon.find((x) => includesAny(x, ["chicken", "tuna", "salmon", "shrimp", "beans", "chickpeas", "lentils"])) || "";
-    const cheese = canon.find((x) => includesAny(x, ["cheese", "feta", "parmesan", "mozzarella", "cheddar"])) || "";
-
+    const title = "Quick Salad";
     const ingredientsOut = [
-      `2–3 cups ${greens}, washed and dried`,
-      "1–2 cups chopped vegetables (whatever you have)",
+      "2 cups leafy greens (spinach/lettuce/arugula)",
+      "1 cup chopped vegetables (tomato, cucumber, peppers, etc.)",
+      "1/2 cup protein (optional): chicken/beans/tuna",
+      "2 tbsp dressing (or simple vinaigrette)",
     ];
-    if (protein) ingredientsOut.push(`1/2–1 cup ${protein} (cooked / rinsed, as needed)`);
-    if (cheese) ingredientsOut.push(`2 tbsp ${cheese} (optional)`);
-    ingredientsOut.push("2 tbsp dressing (or simple vinaigrette)");
 
     const steps = [
       "Wash and dry greens well (dry greens hold dressing better).",
       "Chop vegetables into bite-size pieces and add to a large bowl.",
-      "Add protein/cheese if using.",
-      "Dress lightly, toss, then taste. Add more dressing 1 tsp at a time so it doesn’t get soggy.",
+      "Add protein if using (cooked chicken, rinsed beans, tuna).",
+      "Add dressing gradually (a teaspoon at a time), toss, taste, and adjust.",
     ];
 
     return { recipe: { title, ingredients: ingredientsOut, steps, meta }, usedAI: false, modelUsed: null };
   }
 
-  // --- Breakfast ---
-  if (kind === "breakfast") {
-    const title = `${titleBase} Breakfast`;
+  // Savory: decide entree vs bowl (avoid “Bowl” when no base is present)
+  const hasBase = canon.some((x) => includesAny(x, ["rice", "pasta", "noodle", "ramen", "quinoa", "couscous", "tortilla", "wrap"]));
+  const protein = canon.find((x) => includesAny(x, ["lamb", "chops", "steak", "beef", "chicken", "turkey", "pork", "salmon", "shrimp", "tuna", "tofu", "beans"])) || "";
+  const looksLikeEntree = Boolean(protein) && !hasBase;
+
+  const title = looksLikeEntree ? `${titleCase(protein)} with Vegetables` : "Savory Bowl";
+
+  if (looksLikeEntree) {
     const ingredientsOut = [
-      "2 eggs",
-      "1–2 slices toast (or bread item you have)",
-      "1 tbsp butter or oil (optional)",
-      "Salt + pepper, to taste",
+      "6–8 oz protein (ex: chicken, salmon, lamb chops)",
+      "1–2 cups vegetables, chopped",
+      "1 tbsp olive oil (for cooking)",
+      "Salt + black pepper, to taste",
+      "Optional: 1–2 tbsp sauce (soy/lemon/garlic) if you have it",
     ];
 
     const steps = [
-      "Crack eggs into a bowl and whisk 10–15 seconds until uniform.",
-      "Heat a nonstick pan over medium. Add a small pat of butter (or a little oil).",
-      "Pour in eggs and stir gently for 2–4 minutes until softly set (don’t overcook).",
-      "Toast bread. Serve eggs on the side (or on toast).",
+      `Prep: pat the protein dry and season lightly with salt/pepper. Chop vegetables. (Goal: ~${meta.timeMinutes} minutes total.)`,
+      "Heat a pan over medium-high for 2 minutes. Add olive oil.",
+      "Sear protein: cook 3–4 minutes without moving to build color. Flip and cook 3–6 minutes more (until cooked through). Rest 3 minutes.",
+      "Cook vegetables in the same pan: sauté 4–6 minutes until tender-crisp (add a splash of water if pan gets dry).",
+      "Finish: toss with a squeeze of lemon or a spoon of sauce if you have it. Taste and adjust seasoning.",
+      "Serve protein with vegetables and any pan juices spooned over top.",
     ];
 
     return { recipe: { title, ingredients: ingredientsOut, steps, meta }, usedAI: false, modelUsed: null };
   }
 
-  // --- Savory default (ENTRÉE vs BOWL) ---
-  {
-    const hasBase = detectHasBase(canon);
+  // Bowl
+  const ingredientsOut = [
+    "6–8 oz protein (or 1 block tofu / 1 can beans)",
+    "1 cup cooked base (rice/pasta/noodles) OR cook per package",
+    "1–2 cups vegetables, chopped",
+    "1–2 tbsp sauce/seasoning (soy/lemon/garlic/etc.)",
+    "1 tbsp olive oil (for cooking)",
+    "Salt + black pepper, to taste",
+  ];
 
-    const proteinItem =
-      canon.find((x) =>
-        includesAny(x, [
-          "lamb",
-          "chop",
-          "chops",
-          "steak",
-          "beef",
-          "chicken",
-          "turkey",
-          "pork",
-          "salmon",
-          "shrimp",
-          "tuna",
-          "tofu",
-          "beans",
-          "chickpeas",
-          "lentils",
-        ])
-      ) || "";
+  const steps = [
+    `Prep vegetables and protein. Aim to finish in ~${meta.timeMinutes} minutes.`,
+    "Cook the base (rice/pasta/noodles) per package. If using leftovers, warm them.",
+    "Heat pan over medium-high. Add oil and cook protein until browned and cooked through.",
+    "Add vegetables and cook 4–6 minutes until tender-crisp.",
+    "Add sauce/seasoning and toss 30–60 seconds. Taste and adjust.",
+    "Serve over the base. Add toppings like lemon/herbs/chili flakes if desired.",
+  ];
 
-    // If you didn't include a base (rice/pasta/noodles/etc.) but you DID include a protein,
-    // it should read like an entrée (not a bowl).
-    const looksLikeEntree = !!proteinItem && !hasBase;
-
-    const title = looksLikeEntree ? smartEntreeTitle(canon) : `${titleBase} Bowl`;
-
-    const ingredientsOut = [];
-
-    if (looksLikeEntree) {
-      ingredientsOut.push(guessProteinQty(canon));
-
-      const veg = pickVeg(canon);
-      if (veg.length) ingredientsOut.push(`1–2 cups ${titleCase(veg[0])}, trimmed/chopped`);
-      else ingredientsOut.push("1–2 cups vegetables (fresh or frozen), chopped");
-
-      if (detectLooksLikeSauce(canon)) {
-        ingredientsOut.push("2–3 tbsp sauce/finish (use what you listed: soy/lemon/garlic/honey, etc.)");
-      } else {
-        ingredientsOut.push("1 tbsp lemon juice OR 1 tbsp butter + splash of water (quick pan sauce)");
-      }
-
-      ingredientsOut.push("1 tbsp olive oil (for cooking)");
-      ingredientsOut.push("Salt + black pepper, to taste");
-
-      const steps = [
-        `Prep (5 min): pat protein dry (better browning). Trim/chop vegetables into bite-size pieces.`,
-        "Season protein lightly with salt/pepper. (If you listed soy/lemon/garlic, save it for the end so it doesn’t burn.)",
-        "Heat a pan over medium-high for ~2 minutes until hot. Add olive oil.",
-        "Sear protein: add to pan and don’t move it for 3–4 minutes to build a crust. Flip and cook another 3–6 minutes (until cooked through). Remove to a plate and rest 3 minutes.",
-        "Cook vegetables in the same pan: add veg + a pinch of salt. Sauté 4–6 minutes until tender-crisp. Add a splash of water if the pan gets dry.",
-        "Finish: lower heat. Add your sauce/lemon/garlic/honey and toss 30–60 seconds so it coats. Taste and adjust seasoning.",
-        "Plate protein with vegetables. Spoon pan sauce over the top and serve.",
-      ];
-
-      return { recipe: { title, ingredients: ingredientsOut, steps, meta }, usedAI: false, modelUsed: null };
-    }
-
-    // Bowl-style
-    ingredientsOut.push(guessProteinQty(canon));
-    ingredientsOut.push(guessBaseQty(canon));
-    ingredientsOut.push("1–2 cups vegetables (fresh or frozen), chopped");
-    ingredientsOut.push("2 tbsp sauce or seasoning (soy/lemon/garlic/etc.)");
-    ingredientsOut.push("1 tbsp olive oil (for cooking)");
-    ingredientsOut.push("Salt + black pepper, to taste");
-
-    const steps = [
-      `Prep (5 min): chop vegetables. Pat protein dry. Target finish in ~${meta.timeMinutes} minutes.`,
-      "Cook your base (rice/pasta/noodles) per package directions if needed. If already cooked, warm it.",
-      "Heat a pan over medium-high. Add olive oil.",
-      "Cook protein until browned and cooked through (or tofu until crisp), 6–10 minutes depending on type. Remove to a plate.",
-      "Cook vegetables in the same pan 4–6 minutes until tender-crisp. Add a splash of water if needed.",
-      "Add sauce/seasoning back into the pan and toss everything 30–60 seconds so it coats evenly. Taste and adjust seasoning.",
-      "Serve over the base. Optional: add lemon, herbs, chili flakes, or a drizzle of sauce on top.",
-    ];
-
-    return { recipe: { title, ingredients: ingredientsOut, steps, meta }, usedAI: false, modelUsed: null };
-  }
+  return { recipe: { title, ingredients: ingredientsOut, steps, meta }, usedAI: false, modelUsed: null };
 }
 
-async function tryGemini({ ingredients, pantry, diet, timeMinutes }) {
+/**
+ * Gemini attempt — MUST NEVER crash.
+ * If anything fails, return null so fallback is used.
+ */
+async function tryGemini({ ingredients, pantry = [], diet = "None", timeMinutes = 30 }) {
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   if (!apiKey) return null;
 
   let GoogleGenerativeAI;
   try {
     ({ GoogleGenerativeAI } = require("@google/generative-ai"));
-  } catch (e) {
-    return null; // module not installed
+  } catch (_) {
+    return null;
   }
 
-  // Do NOT call listModels or anything that fetches model catalogs.
-  // Just call a known model directly.
   const modelName = process.env.GEMINI_MODEL || "gemini-1.5-flash";
 
-  try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: modelName });
+  const ing = normalizeList(ingredients);
+  const pan = normalizeList(pantry);
 
-    const ing = normalizeList(ingredients);
-    const pan = normalizeList(pantry);
-
-    const prompt = `
+  const prompt = `
 Return ONLY valid JSON (no markdown, no backticks) in this exact shape:
 {
   "title": "string",
@@ -448,23 +219,30 @@ Return ONLY valid JSON (no markdown, no backticks) in this exact shape:
 
 Rules:
 - Provide realistic QUANTITIES for 1–2 servings.
-- Steps must be specific: temps, times, and what to look for.
+- Steps must be specific with times/temps and cues.
 - Do NOT add random ingredients.
-- Only include: (a) provided ingredients (b) pantry staples ONLY if they truly make sense.
-- If ingredients clearly form PB&J (bread + nut butter + jelly/jam), do NOT add salt/pepper/oil.
-- Diet: ${diet || "None"}
-- Time limit: ${Number(timeMinutes) || 30} minutes
-- Ingredients: ${ing.join(", ")}
-- Pantry (optional): ${pan.join(", ")}
-`;
+- If PB&J (bread + nut butter + jelly/jam), do NOT add salt/pepper/oil.
+Diet: ${diet}
+Time: ${Number(timeMinutes) || 30}
+Ingredients: ${ing.join(", ")}
+Pantry: ${pan.join(", ")}
+`.trim();
 
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: modelName });
     const resp = await model.generateContent(prompt);
-    const text = resp?.response?.text?.() || "";
 
-    // Sometimes models return whitespace before/after JSON
-    const trimmed = String(text || "").trim();
+    const raw = resp?.response?.text?.() || "";
+    const text = String(raw).trim();
 
-    const parsed = JSON.parse(trimmed);
+    // Some models wrap JSON in junk—extract first {...} safely
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+    if (start === -1 || end === -1 || end <= start) return null;
+
+    const jsonSlice = text.slice(start, end + 1);
+    const parsed = JSON.parse(jsonSlice);
 
     if (!parsed || typeof parsed !== "object") return null;
     if (typeof parsed.title !== "string") return null;
@@ -475,16 +253,14 @@ Rules:
     parsed.meta.timeMinutes = Number(parsed.meta.timeMinutes || timeMinutes || 30) || 30;
 
     return { recipe: parsed, usedAI: true, modelUsed: modelName };
-  } catch (e) {
-    // Gemini can fail (bad key, model blocked, network, etc). Never crash.
+  } catch (_) {
     return null;
   }
 }
 
-async function generateBetterRecipe({ ingredients, pantry, diet, timeMinutes }) {
+async function generateBetterRecipe({ ingredients, pantry = [], diet = "None", timeMinutes = 30 }) {
   const ai = await tryGemini({ ingredients, pantry, diet, timeMinutes });
   if (ai) return ai;
-
   return buildFallbackRecipe({ ingredients, diet, timeMinutes });
 }
 
