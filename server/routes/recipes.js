@@ -1,15 +1,14 @@
 // server/routes/recipes.js
+"use strict";
+
 const express = require("express");
 const router = express.Router();
 
+const Recipe = require("../models/Recipe");
 const { generateBetterRecipe } = require("../services/aiRecipe");
 
 function asArray(v) {
   return Array.isArray(v) ? v : [];
-}
-
-function stripBullets(line) {
-  return String(line || "").replace(/^\s*[-•]\s*/, "").trim();
 }
 
 function toTextFromRecipeStruct(recipe) {
@@ -19,7 +18,7 @@ function toTextFromRecipeStruct(recipe) {
   const diet = meta.diet ?? "None";
 
   const ingredientsLines = asArray(recipe?.ingredients)
-    .map((x) => stripBullets(x))
+    .map((x) => String(x || "").trim())
     .filter(Boolean);
 
   const stepsLines = asArray(recipe?.steps)
@@ -48,59 +47,100 @@ ${stepsBlock}
 }
 
 /**
- * POST /api/recipes/generate
+ * POST /recipes/generate and /api/recipes/generate (because you mount both)
  * Body: { ingredients: string[] | string, diet?: string, timeMinutes?: number, time?: number }
  *
  * Response:
- * { text: string, title: string, meta: {...}, recipe: {...}, usedAI: boolean, modelUsed?: string }
+ * { text, title, meta, recipe, usedAI, modelUsed }
  */
 router.post("/generate", async (req, res) => {
   try {
     const body = req.body || {};
-
-    // Allow either array or comma string
     const ingredientsRaw = body.ingredients ?? "";
     const diet = String(body.diet || "None");
     const timeMinutes = Number(body.timeMinutes ?? body.time ?? 30) || 30;
 
-    // generateBetterRecipe expects: { ingredients, pantry, diet, timeMinutes }
     const result = await generateBetterRecipe({
       ingredients: ingredientsRaw,
-      pantry: [], // (optional) wire this later if you want
+      pantry: [],
       diet,
       timeMinutes,
     });
 
-    // result shape from your aiRecipe.js:
-    // { recipe: {title, ingredients[], steps[], meta}, usedAI, modelUsed }
     const recipe = result?.recipe;
-
-    // Build text for the client (this is what Home.jsx needs)
     const text = toTextFromRecipeStruct(recipe);
 
     if (typeof text !== "string" || !text.trim()) {
       return res.status(500).json({ error: "Invalid recipe response (no text)." });
     }
 
-    return res.json({
+    // optional userId capture (won't break if you don't have auth)
+    const userId =
+      req.session?.userId ||
+      req.session?.user?.id ||
+      req.session?.user?._id ||
+      null;
+
+    // Save to MongoDB so Recipes page can actually show them
+    const saved = await Recipe.create({
+      userId,
       title: recipe?.title || "Recipe",
       text,
-      meta: { diet, timeMinutes },
-      recipe,
+      ingredients: asArray(recipe?.ingredients).map(String),
+      steps: asArray(recipe?.steps).map(String),
+      meta: { diet, timeMinutes, type: recipe?.meta?.type || null },
       usedAI: Boolean(result?.usedAI),
       modelUsed: result?.modelUsed || null,
     });
+
+    return res.json({
+      title: saved.title,
+      text: saved.text,
+      meta: saved.meta,
+      recipe: {
+        title: saved.title,
+        ingredients: saved.ingredients,
+        steps: saved.steps,
+        meta: saved.meta,
+      },
+      usedAI: saved.usedAI,
+      modelUsed: saved.modelUsed,
+      id: saved._id,
+      createdAt: saved.createdAt,
+    });
   } catch (err) {
-    console.error("❌ /api/recipes/generate error:", err?.message || err);
+    console.error("❌ /recipes/generate error:", err?.message || err);
     return res.status(500).json({ error: err?.message || "Server error" });
   }
 });
 
 /**
- * GET /api/recipes
+ * GET /recipes and /api/recipes
+ * Returns: { recipes: Recipe[] }
  */
 router.get("/", async (req, res) => {
-  return res.json({ recipes: [] });
+  try {
+    const userId =
+      req.session?.userId ||
+      req.session?.user?.id ||
+      req.session?.user?._id ||
+      null;
+
+    const limit = Math.min(Number(req.query.limit || 50) || 50, 200);
+
+    // If you have users, show only their recipes; otherwise show all
+    const filter = userId ? { userId } : {};
+
+    const recipes = await Recipe.find(filter)
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+
+    return res.json({ recipes });
+  } catch (err) {
+    console.error("❌ /recipes GET error:", err?.message || err);
+    return res.status(500).json({ error: err?.message || "Server error" });
+  }
 });
 
 module.exports = router;
