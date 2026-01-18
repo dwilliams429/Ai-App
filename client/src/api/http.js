@@ -2,29 +2,41 @@
 import axios from "axios";
 
 /**
- * Production:
- *   VITE_API_URL = https://ai-app-8ale.onrender.com
+ * RULES (locked-in):
+ * - In production: VITE_API_URL = https://ai-app-8ale.onrender.com
+ *   → baseURL = https://ai-app-8ale.onrender.com/api
  *
- * Local dev:
- *   VITE_API_URL can be empty → Vite proxy handles /api
+ * - In local dev: VITE_API_URL is undefined
+ *   → baseURL = "/api" (Vite proxy)
+ *
+ * - NEVER allow "/api/api"
  */
-const baseURL = import.meta.env.VITE_API_URL || "";
 
-export const api = axios.create({
+function normalizeBase(url) {
+  if (!url) return "";
+
+  // remove trailing slashes
+  let clean = url.replace(/\/+$/, "");
+
+  // if someone accidentally sets VITE_API_URL ending in /api, strip it
+  if (clean.endsWith("/api")) {
+    clean = clean.slice(0, -4);
+  }
+
+  return clean;
+}
+
+const raw = normalizeBase(import.meta.env.VITE_API_URL);
+
+// final baseURL decision
+const baseURL = raw ? `${raw}/api` : "/api";
+
+const api = axios.create({
   baseURL,
   withCredentials: true,
+  headers: {
+    "Content-Type": "application/json",
+  },
 });
-
-api.interceptors.response.use(
-  (res) => res,
-  (err) => {
-    console.error(
-      "[api] error:",
-      err?.response?.status,
-      err?.response?.data || err?.message
-    );
-    return Promise.reject(err);
-  }
-);
 
 export default api;
