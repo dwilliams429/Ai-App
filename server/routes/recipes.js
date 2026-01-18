@@ -15,6 +15,15 @@ function stripBullets(line) {
   return String(line || "").replace(/^\s*[-•]\s*/, "").trim();
 }
 
+function ingredientLine(x) {
+  // supports string or {item, amount}
+  if (typeof x === "string") return stripBullets(x);
+  const item = stripBullets(x?.item || "");
+  const amount = stripBullets(x?.amount || "");
+  if (!item) return "";
+  return amount ? `${amount} ${item}` : item;
+}
+
 function toTextFromRecipeStruct(recipe) {
   const title = recipe?.title || "Recipe";
   const meta = recipe?.meta || {};
@@ -22,7 +31,7 @@ function toTextFromRecipeStruct(recipe) {
   const diet = meta.diet ?? "None";
 
   const ingredientsLines = asArray(recipe?.ingredients)
-    .map((x) => stripBullets(x))
+    .map((x) => ingredientLine(x))
     .filter(Boolean);
 
   const stepsLines = asArray(recipe?.steps)
@@ -39,10 +48,12 @@ function toTextFromRecipeStruct(recipe) {
       ? stepsLines.map((s, i) => `${i + 1}. ${s}`).join("\n")
       : "1. (none)";
 
+  const summary = String(recipe?.summary || "").trim();
+
   return `${title}
 Diet: ${diet}  •  Time: ${timeMinutes} min
 
-Ingredients:
+${summary ? `Summary:\n${summary}\n\n` : ""}Ingredients:
 ${ingredientsBlock}
 
 Steps:
@@ -52,41 +63,41 @@ ${stepsBlock}
 
 /**
  * POST /recipes/generate   (also works at /api/recipes/generate because of server.js mounts)
- * Body: { ingredients: string[] | string, diet?: string, timeMinutes?: number, time?: number }
- *
- * Response:
- * { text: string, title: string, meta: {...}, recipe: {...}, saved: {...}, usedAI: boolean, modelUsed?: string }
  */
 router.post("/generate", async (req, res) => {
   try {
     const body = req.body || {};
 
-    // Allow either array or comma string
     const ingredientsRaw = body.ingredients ?? "";
     const diet = String(body.diet || "None");
     const timeMinutes = Number(body.timeMinutes ?? body.time ?? 30) || 30;
 
     const result = await generateBetterRecipe({
       ingredients: ingredientsRaw,
-      pantry: [], // wire later if you want
+      pantry: [],
       diet,
       timeMinutes,
     });
 
     const recipe = result?.recipe;
-    const text = toTextFromRecipeStruct(recipe);
+
+    // enforce meta in recipe so formatter always shows correct values
+    const recipeWithMeta = {
+      ...(recipe || {}),
+      meta: { diet, timeMinutes },
+    };
+
+    const text = toTextFromRecipeStruct(recipeWithMeta);
 
     if (typeof text !== "string" || !text.trim()) {
       return res.status(500).json({ error: "Invalid recipe response (no text)." });
     }
 
-    // ✅ SAVE to MongoDB
     const doc = await Recipe.create({
-      title: recipe?.title || "Recipe",
+      title: recipeWithMeta?.title || "Recipe",
       text,
       meta: { diet, timeMinutes },
-      recipe: recipe || {},
-      // userId: req.session?.userId || undefined, // optional later
+      recipe: recipeWithMeta || {},
     });
 
     return res.json({
@@ -106,8 +117,6 @@ router.post("/generate", async (req, res) => {
 
 /**
  * GET /recipes  (also works at /api/recipes)
- * Returns:
- * { recipes: [...] }
  */
 router.get("/", async (req, res) => {
   try {

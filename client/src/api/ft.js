@@ -4,20 +4,19 @@ import api from "./http";
 const ft = {
   // ---------- Recipes ----------
   async generateRecipe(payload) {
-    // server supports /recipes and /api/recipes (server.js mounts both)
     const res = await api.post("/recipes/generate", payload);
     return res.data;
   },
 
   async listRecipes() {
     const res = await api.get("/recipes");
-    return res.data;
+    return Array.isArray(res.data?.recipes) ? res.data.recipes : [];
   },
 
   // ---------- Inventory ----------
   async listInventory() {
     const res = await api.get("/inventory");
-    return res.data;
+    return Array.isArray(res.data?.items) ? res.data.items : [];
   },
 
   async addInventory(payload) {
@@ -28,7 +27,7 @@ const ft = {
   // ---------- Shopping ----------
   async listShopping() {
     const res = await api.get("/shopping");
-    return res.data;
+    return Array.isArray(res.data?.items) ? res.data.items : [];
   },
 
   async addShopping(payload) {

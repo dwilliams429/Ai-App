@@ -40,7 +40,7 @@ export default function Home() {
 
       setRecipeText(data.text);
 
-      // ✅ tell other pages (Recipes) something new was saved
+      // ✅ tell Recipes page to refresh
       localStorage.setItem("recipes:lastSavedAt", String(Date.now()));
     } catch (e) {
       setErr(e?.message || "Failed to generate recipe");
