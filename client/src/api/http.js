@@ -2,43 +2,25 @@
 import axios from "axios";
 
 /**
- * Vercel:
- *   VITE_API_URL = https://ai-app-8ale.onrender.com
- * (NO trailing slash, NO /api)
+ * If VITE_API_URL is set (deployed), we use that full origin as the base.
+ * Example: VITE_API_URL = https://ai-app-8ale.onrender.com
  *
- * Local:
- *   use Vite proxy -> baseURL becomes "/api"
+ * Then ft.js calls "/recipes" and "/inventory" etc.
+ * No "/api/api" duplication. No guessing.
  */
 
-function normalizeBase(url) {
-  if (!url) return "";
-  return String(url).trim().replace(/\/+$/, "");
+function normalizeBase(v) {
+  const s = String(v || "").trim();
+  if (!s) return "";
+  return s.endsWith("/") ? s.slice(0, -1) : s;
 }
 
-const raw = normalizeBase(import.meta.env.VITE_API_URL);
+const baseURL = normalizeBase(import.meta.env.VITE_API_URL);
 
-// If deployed (VITE_API_URL present): use https://... (no /api here)
-// If local: use "/api" and the proxy handles it
-const baseURL = raw || "/api";
-
-export const api = axios.create({
-  baseURL,
+const api = axios.create({
+  baseURL: baseURL || "", // if blank, works with same-origin or Vite proxy
   withCredentials: true,
+  headers: { "Content-Type": "application/json" },
 });
-
-api.interceptors.response.use(
-  (res) => res,
-  (err) => {
-    const status = err?.response?.status;
-    const url = err?.config?.url || "";
-
-    if (status === 401 && url.includes("/auth/me")) {
-      return Promise.reject(err);
-    }
-
-    console.error("[api] error:", status, err?.response?.data || err?.message);
-    return Promise.reject(err);
-  }
-);
 
 export default api;

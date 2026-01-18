@@ -5,18 +5,18 @@ const ft = {
   // ---------- Recipes ----------
   async generateRecipe(payload) {
     const res = await api.post("/recipes/generate", payload);
-    return res.data;
+    return res.data; // { title, text, saved, ... }
   },
 
   async listRecipes() {
     const res = await api.get("/recipes");
-    return Array.isArray(res.data?.recipes) ? res.data.recipes : [];
+    return res.data; // { recipes: [...] }
   },
 
   // ---------- Inventory ----------
   async listInventory() {
     const res = await api.get("/inventory");
-    return Array.isArray(res.data?.items) ? res.data.items : [];
+    return res.data;
   },
 
   async addInventory(payload) {
@@ -27,7 +27,7 @@ const ft = {
   // ---------- Shopping ----------
   async listShopping() {
     const res = await api.get("/shopping");
-    return Array.isArray(res.data?.items) ? res.data.items : [];
+    return res.data;
   },
 
   async addShopping(payload) {

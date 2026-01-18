@@ -3,34 +3,28 @@ import React, { useEffect, useMemo, useState } from "react";
 import GlassCard from "../components/GlassCard";
 import ft from "../api/ft";
 
-function formatDate(d) {
-  try {
-    return new Date(d).toLocaleString();
-  } catch {
-    return "";
-  }
-}
-
 export default function Recipes() {
   const [items, setItems] = useState([]);
   const [busy, setBusy] = useState(true);
   const [err, setErr] = useState("");
-  const [q, setQ] = useState("");
+  const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState(null);
 
-  async function load({ keepSelection = true } = {}) {
+  async function load() {
     setErr("");
     setBusy(true);
     try {
-      const arr = await ft.listRecipes(); // ft already returns array
+      // ft.listRecipes returns { recipes: [...] }
+      const data = await ft.listRecipes();
+      const arr = Array.isArray(data?.recipes) ? data.recipes : [];
       setItems(arr);
 
-      if (!keepSelection) {
-        setSelectedId(arr?.[0]?._id || null);
+      // Keep selection if possible, otherwise select first item
+      if (arr.length) {
+        const stillExists = selectedId && arr.some((r) => String(r?._id) === String(selectedId));
+        setSelectedId(stillExists ? selectedId : String(arr[0]?._id || ""));
       } else {
-        // if selection no longer exists, pick first
-        const stillExists = arr.some((r) => r?._id === selectedId);
-        if (!stillExists) setSelectedId(arr?.[0]?._id || null);
+        setSelectedId(null);
       }
     } catch (e) {
       setErr(e?.message || "Failed to fetch");
@@ -41,126 +35,139 @@ export default function Recipes() {
     }
   }
 
+  // Initial load
   useEffect(() => {
-    load({ keepSelection: false });
+    load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-refresh when Home saves a recipe (storage event)
+  // Auto-refresh when Home saves a recipe:
+  // Home will set localStorage key "recipes:lastSavedAt" to Date.now()
   useEffect(() => {
     function onStorage(e) {
-      if (e.key === "recipes:lastSavedAt") {
-        load({ keepSelection: false });
-      }
+      if (e.key === "recipes:lastSavedAt") load();
     }
     window.addEventListener("storage", onStorage);
 
-    // also handle same-tab updates (storage event doesn't fire in same tab)
-    const poll = setInterval(() => {
-      const v = localStorage.getItem("recipes:lastSavedAt");
-      // if present and changed, reload
-      if (v && v !== onStorage._last) {
-        onStorage._last = v;
-        load({ keepSelection: false });
-      }
-    }, 1500);
+    // Also handle same-tab updates (storage event doesn't fire in same tab),
+    // so we poll a tiny key read on focus.
+    function onFocus() {
+      const ts = Number(localStorage.getItem("recipes:lastSavedAt") || 0);
+      if (ts) load();
+    }
+    window.addEventListener("focus", onFocus);
 
     return () => {
       window.removeEventListener("storage", onStorage);
-      clearInterval(poll);
+      window.removeEventListener("focus", onFocus);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    if (!needle) return items;
+    const q = query.trim().toLowerCase();
+    if (!q) return items;
     return items.filter((r) => {
       const title = String(r?.title || "").toLowerCase();
       const text = String(r?.text || "").toLowerCase();
-      return title.includes(needle) || text.includes(needle);
+      return title.includes(q) || text.includes(q);
     });
-  }, [items, q]);
+  }, [items, query]);
 
   const selected = useMemo(() => {
-    return filtered.find((r) => r?._id === selectedId) || filtered[0] || null;
+    if (!selectedId) return null;
+    return filtered.find((r) => String(r?._id) === String(selectedId)) || null;
   }, [filtered, selectedId]);
+
+  function formatDate(d) {
+    try {
+      return new Date(d).toLocaleString();
+    } catch {
+      return "";
+    }
+  }
 
   return (
     <GlassCard title="Recipes" subtitle="Saved recipes from Home (stored in MongoDB).">
       {err ? <div className="error-banner">⚠️ {err}</div> : null}
 
       <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 10, flexWrap: "wrap" }}>
-        <button className="small-btn" onClick={() => load({ keepSelection: true })} disabled={busy}>
+        <button className="small-btn" onClick={load} disabled={busy}>
           {busy ? "Loading..." : "Refresh"}
         </button>
 
         <input
           className="field__input"
-          style={{ maxWidth: 380 }}
-          placeholder="Search saved recipes…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
+          style={{ maxWidth: 360 }}
+          placeholder="Search title or ingredients..."
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
         />
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 14, marginTop: 14 }}>
-        {/* LEFT: list */}
-        <div>
-          {!busy && filtered.length === 0 ? (
-            <div className="muted">No recipes match your search.</div>
-          ) : null}
+      {!busy && filtered.length === 0 ? (
+        <div className="muted" style={{ marginTop: 12 }}>
+          No saved recipes yet. Generate one on Home.
+        </div>
+      ) : null}
 
-          {filtered.map((r) => {
-            const id = r?._id;
-            const active = id && id === (selected?._id || null);
-            const title = r?.title || "Recipe";
+      {/* Two-column layout on desktop, stacks on mobile */}
+      <div style={{ display: "flex", gap: 14, marginTop: 14, flexWrap: "wrap" }}>
+        {/* LIST */}
+        <div style={{ flex: 1, minWidth: 280 }}>
+          {filtered.map((r, idx) => {
+            const id = String(r?._id || idx);
+            const title = r?.title || `Recipe ${idx + 1}`;
             const when = r?.createdAt ? formatDate(r.createdAt) : "";
+            const isActive = String(selectedId) === id;
 
             return (
               <button
-                key={id || title}
+                key={id}
+                type="button"
                 onClick={() => setSelectedId(id)}
                 className="list-card"
                 style={{
+                  marginTop: 10,
                   width: "100%",
                   textAlign: "left",
-                  marginTop: 10,
                   cursor: "pointer",
-                  border: active ? "1px solid rgba(255,255,255,0.35)" : "1px solid transparent",
-                  background: active ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.03)",
+                  border: isActive ? "1px solid rgba(255,255,255,0.35)" : "1px solid rgba(255,255,255,0.12)",
+                  background: isActive ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.03)",
                 }}
               >
                 <div style={{ fontWeight: 800 }}>{title}</div>
-                {when ? <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>{when}</div> : null}
+                {when ? <div className="muted" style={{ marginTop: 2 }}>{when}</div> : null}
               </button>
             );
           })}
         </div>
 
-        {/* RIGHT: details */}
-        <div className="list-card" style={{ minHeight: 220 }}>
-          {!selected ? (
-            <div className="muted">Select a recipe to view details.</div>
-          ) : (
-            <>
-              <div style={{ fontWeight: 900, fontSize: 18 }}>{selected.title || "Recipe"}</div>
+        {/* DETAIL */}
+        <div style={{ flex: 2, minWidth: 300 }}>
+          {selected ? (
+            <div className="list-card" style={{ marginTop: 10 }}>
+              <div style={{ fontWeight: 900, fontSize: 18 }}>{selected.title}</div>
               {selected.createdAt ? (
-                <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
+                <div className="muted" style={{ marginTop: 4 }}>
                   {formatDate(selected.createdAt)}
                 </div>
               ) : null}
 
               {selected.text ? (
-                <pre style={{ marginTop: 12, whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
+                <pre style={{ marginTop: 10, whiteSpace: "pre-wrap", lineHeight: 1.55 }}>
                   {selected.text}
                 </pre>
               ) : (
-                <div className="muted" style={{ marginTop: 12 }}>
-                  No recipe text stored.
+                <div className="muted" style={{ marginTop: 10 }}>
+                  No recipe text available.
                 </div>
               )}
-            </>
+            </div>
+          ) : (
+            <div className="muted" style={{ marginTop: 10 }}>
+              Select a recipe to view it.
+            </div>
           )}
         </div>
       </div>
