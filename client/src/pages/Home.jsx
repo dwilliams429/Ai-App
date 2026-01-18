@@ -28,23 +28,18 @@ export default function Home() {
 
     setBusy(true);
     try {
-      const payload = {
+      const data = await ft.generateRecipe({
         ingredients: cleaned,
-        diet: diet === "None" ? "" : diet,
+        diet,
         timeMinutes: Number(timeMinutes) || 30,
-      };
+      });
 
-      const data = await ft.generateRecipe(payload);
+      // ✅ Hard requirement: server must return { text: string }
+      if (!data || typeof data.text !== "string") {
+        throw new Error("Invalid recipe response from server (expected { text: string }).");
+      }
 
-      const text =
-        data?.recipe?.text ||
-        data?.recipe ||
-        data?.text ||
-        data?.result ||
-        (typeof data === "string" ? data : "");
-
-      if (!text) throw new Error("No recipe returned from API.");
-      setRecipeText(text);
+      setRecipeText(data.text);
     } catch (e) {
       setErr(e?.message || "Failed to generate recipe");
     } finally {
@@ -61,7 +56,11 @@ export default function Home() {
 
       <div className="field" style={{ marginTop: 10 }}>
         <div className="field__label">Ingredients (comma separated)</div>
-        <input className="field__input" value={ingredients} onChange={(e) => setIngredients(e.target.value)} />
+        <input
+          className="field__input"
+          value={ingredients}
+          onChange={(e) => setIngredients(e.target.value)}
+        />
       </div>
 
       <div style={{ display: "flex", gap: 12, marginTop: 12, flexWrap: "wrap" }}>
@@ -92,7 +91,9 @@ export default function Home() {
       </button>
 
       {recipeText ? (
-        <pre style={{ marginTop: 16, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{recipeText}</pre>
+        <pre style={{ marginTop: 16, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
+          {recipeText}
+        </pre>
       ) : null}
     </GlassCard>
   );
