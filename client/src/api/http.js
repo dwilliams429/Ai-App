@@ -2,11 +2,11 @@
 import axios from "axios";
 
 /**
- * In Vercel:
+ * Production:
  *   VITE_API_URL = https://ai-app-8ale.onrender.com
  *
- * Locally:
- *   leave blank and use Vite proxy "/api"
+ * Local dev:
+ *   VITE_API_URL can be empty → Vite proxy handles /api
  */
 const baseURL = import.meta.env.VITE_API_URL || "";
 
@@ -18,14 +18,11 @@ export const api = axios.create({
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    const status = err?.response?.status;
-    const url = err?.config?.url || "";
-
-    if (status === 401 && url.includes("/auth/me")) {
-      return Promise.reject(err);
-    }
-
-    console.error("[api] error:", status, err?.response?.data || err?.message);
+    console.error(
+      "[api] error:",
+      err?.response?.status,
+      err?.response?.data || err?.message
+    );
     return Promise.reject(err);
   }
 );
