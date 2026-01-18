@@ -4,19 +4,20 @@ import api from "./http";
 const ft = {
   // ---------- Recipes ----------
   async generateRecipe(payload) {
+    // Always hit /api/* so it works in dev proxy + production baseURL
     const res = await api.post("/api/recipes/generate", payload);
     return res.data;
   },
 
   async listRecipes() {
     const res = await api.get("/api/recipes");
-    return Array.isArray(res.data?.recipes) ? res.data.recipes : [];
+    return res.data; // { recipes: [...] }
   },
 
   // ---------- Inventory ----------
   async listInventory() {
     const res = await api.get("/api/inventory");
-    return Array.isArray(res.data?.items) ? res.data.items : [];
+    return res.data; // expect { items: [...] }
   },
 
   async addInventory(payload) {
@@ -27,13 +28,13 @@ const ft = {
   // ---------- Shopping ----------
   async listShopping() {
     const res = await api.get("/api/shopping");
-    return Array.isArray(res.data?.items) ? res.data.items : [];
+    return res.data; // expect { items: [...] }
   },
 
   async addShopping(payload) {
     const res = await api.post("/api/shopping", payload);
     return res.data;
-  },
+  }
 };
 
 export default ft;

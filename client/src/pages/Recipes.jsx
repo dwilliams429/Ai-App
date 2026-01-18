@@ -12,11 +12,18 @@ export default function Recipes() {
     setErr("");
     setBusy(true);
     try {
-      // ft.listRecipes() returns an ARRAY (see client/src/api/ft.js)
-      const arr = await ft.listRecipes();
-      setItems(Array.isArray(arr) ? arr : []);
+      const data = await ft.listRecipes();
+
+      // support either { recipes: [...] } OR direct array
+      const arr = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.recipes)
+        ? data.recipes
+        : [];
+
+      setItems(arr);
     } catch (e) {
-      setErr(e?.response?.data?.error || e?.message || "Failed to fetch");
+      setErr(e?.message || "Failed to fetch");
       setItems([]);
     } finally {
       setBusy(false);
@@ -25,6 +32,12 @@ export default function Recipes() {
 
   useEffect(() => {
     load();
+
+    // reload when user returns to tab (helps after generating a recipe)
+    const onFocus = () => load();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -42,15 +55,7 @@ export default function Recipes() {
 
         {items.map((r, idx) => {
           const title = r?.title || r?.name || `Recipe ${idx + 1}`;
-
-          // Your server model uses `text` as the pretty formatted recipe.
-          // Keep a couple fallbacks just in case.
-          const body =
-            r?.text ||
-            (typeof r?.recipe === "string" ? r.recipe : "") ||
-            r?.content ||
-            "";
-
+          const body = r?.text || r?.recipe || r?.content || "";
           return (
             <div key={r?._id || r?.id || idx} className="list-card" style={{ marginTop: 12 }}>
               <div style={{ fontWeight: 700 }}>{title}</div>

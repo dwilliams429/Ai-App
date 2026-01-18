@@ -11,6 +11,14 @@ function asArray(v) {
   return Array.isArray(v) ? v : [];
 }
 
+function normalizeSteps(steps) {
+  // prevent "1. 1. Step" if a model includes numbering
+  return asArray(steps)
+    .map((s) => String(s || "").trim())
+    .filter(Boolean)
+    .map((s) => s.replace(/^\s*\d+\.\s+/, "").trim());
+}
+
 function toTextFromRecipeStruct(recipe) {
   const title = recipe?.title || "Recipe";
   const meta = recipe?.meta || {};
@@ -21,19 +29,13 @@ function toTextFromRecipeStruct(recipe) {
     .map((x) => String(x || "").trim())
     .filter(Boolean);
 
-  const stepsLines = asArray(recipe?.steps)
-    .map((x) => String(x || "").trim())
-    .filter(Boolean);
+  const stepsLines = normalizeSteps(recipe?.steps);
 
   const ingredientsBlock =
-    ingredientsLines.length > 0
-      ? ingredientsLines.map((x) => `- ${x}`).join("\n")
-      : "- (none)";
+    ingredientsLines.length > 0 ? ingredientsLines.map((x) => `- ${x}`).join("\n") : "- (none)";
 
   const stepsBlock =
-    stepsLines.length > 0
-      ? stepsLines.map((s, i) => `${i + 1}. ${s}`).join("\n")
-      : "1. (none)";
+    stepsLines.length > 0 ? stepsLines.map((s, i) => `${i + 1}. ${s}`).join("\n") : "1. (none)";
 
   return `${title}
 Diet: ${diet}  •  Time: ${timeMinutes} min
@@ -47,98 +49,89 @@ ${stepsBlock}
 }
 
 /**
- * POST /recipes/generate and /api/recipes/generate (because you mount both)
+ * POST /api/recipes/generate
  * Body: { ingredients: string[] | string, diet?: string, timeMinutes?: number, time?: number }
  *
- * Response:
- * { text, title, meta, recipe, usedAI, modelUsed }
+ * Saves the generated recipe to MongoDB and returns it.
  */
 router.post("/generate", async (req, res) => {
   try {
     const body = req.body || {};
+
+    // Allow either array or comma string
     const ingredientsRaw = body.ingredients ?? "";
     const diet = String(body.diet || "None");
     const timeMinutes = Number(body.timeMinutes ?? body.time ?? 30) || 30;
+
+    // Optional: attach to logged-in user if you store it on session
+    const userId = req?.session?.userId ? String(req.session.userId) : null;
 
     const result = await generateBetterRecipe({
       ingredients: ingredientsRaw,
       pantry: [],
       diet,
-      timeMinutes,
+      timeMinutes
     });
 
     const recipe = result?.recipe;
-    const text = toTextFromRecipeStruct(recipe);
+    if (!recipe || typeof recipe !== "object") {
+      return res.status(500).json({ error: "Invalid recipe response (no recipe object)." });
+    }
 
-    if (typeof text !== "string" || !text.trim()) {
+    const text = toTextFromRecipeStruct(recipe);
+    if (!text.trim()) {
       return res.status(500).json({ error: "Invalid recipe response (no text)." });
     }
 
-    // optional userId capture (won't break if you don't have auth)
-    const userId =
-      req.session?.userId ||
-      req.session?.user?.id ||
-      req.session?.user?._id ||
-      null;
-
-    // Save to MongoDB so Recipes page can actually show them
     const saved = await Recipe.create({
       userId,
       title: recipe?.title || "Recipe",
       text,
-      ingredients: asArray(recipe?.ingredients).map(String),
-      steps: asArray(recipe?.steps).map(String),
-      meta: { diet, timeMinutes, type: recipe?.meta?.type || null },
+      recipe,
+      meta: { diet, timeMinutes },
       usedAI: Boolean(result?.usedAI),
-      modelUsed: result?.modelUsed || null,
+      modelUsed: result?.modelUsed || null
     });
 
     return res.json({
+      id: saved._id,
       title: saved.title,
       text: saved.text,
       meta: saved.meta,
-      recipe: {
-        title: saved.title,
-        ingredients: saved.ingredients,
-        steps: saved.steps,
-        meta: saved.meta,
-      },
+      recipe: saved.recipe,
       usedAI: saved.usedAI,
-      modelUsed: saved.modelUsed,
-      id: saved._id,
-      createdAt: saved.createdAt,
+      modelUsed: saved.modelUsed
     });
   } catch (err) {
-    console.error("❌ /recipes/generate error:", err?.message || err);
+    console.error("❌ /api/recipes/generate error:", err?.message || err);
     return res.status(500).json({ error: err?.message || "Server error" });
   }
 });
 
 /**
- * GET /recipes and /api/recipes
- * Returns: { recipes: Recipe[] }
+ * GET /api/recipes
+ * Returns saved recipes (most recent first).
  */
 router.get("/", async (req, res) => {
   try {
-    const userId =
-      req.session?.userId ||
-      req.session?.user?.id ||
-      req.session?.user?._id ||
-      null;
+    const userId = req?.session?.userId ? String(req.session.userId) : null;
 
-    const limit = Math.min(Number(req.query.limit || 50) || 50, 200);
-
-    // If you have users, show only their recipes; otherwise show all
     const filter = userId ? { userId } : {};
+    const recipes = await Recipe.find(filter).sort({ createdAt: -1 }).limit(50).lean();
 
-    const recipes = await Recipe.find(filter)
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .lean();
-
-    return res.json({ recipes });
+    return res.json({
+      recipes: recipes.map((r) => ({
+        _id: r._id,
+        title: r.title,
+        text: r.text,
+        meta: r.meta,
+        usedAI: r.usedAI,
+        modelUsed: r.modelUsed,
+        createdAt: r.createdAt
+      }))
+    });
   } catch (err) {
-    console.error("❌ /recipes GET error:", err?.message || err);
+    console.error("❌ /api/recipes GET error:", err?.message || err);
     return res.status(500).json({ error: err?.message || "Server error" });
   }
 });
