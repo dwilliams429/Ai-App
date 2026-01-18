@@ -1,43 +1,37 @@
 // client/src/api/ft.js
 import api from "./http";
 
-/**
- * DO NOT reshape generate responses.
- * The server already returns:
- * { title: string, text: string, meta: object }
- */
-
 const ft = {
   // ---------- Recipes ----------
   async generateRecipe(payload) {
-    const res = await api.post("/recipes/generate", payload);
-    return res.data; // ← RAW SERVER RESPONSE
+    const res = await api.post("/api/recipes/generate", payload);
+    return res.data;
   },
 
   async listRecipes() {
-    const res = await api.get("/recipes");
+    const res = await api.get("/api/recipes");
     return Array.isArray(res.data?.recipes) ? res.data.recipes : [];
   },
 
   // ---------- Inventory ----------
   async listInventory() {
-    const res = await api.get("/inventory");
+    const res = await api.get("/api/inventory");
     return Array.isArray(res.data?.items) ? res.data.items : [];
   },
 
   async addInventory(payload) {
-    const res = await api.post("/inventory", payload);
+    const res = await api.post("/api/inventory", payload);
     return res.data;
   },
 
   // ---------- Shopping ----------
   async listShopping() {
-    const res = await api.get("/shopping");
+    const res = await api.get("/api/shopping");
     return Array.isArray(res.data?.items) ? res.data.items : [];
   },
 
   async addShopping(payload) {
-    const res = await api.post("/shopping", payload);
+    const res = await api.post("/api/shopping", payload);
     return res.data;
   },
 };
