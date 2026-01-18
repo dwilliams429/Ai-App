@@ -4,13 +4,25 @@ import axios from "axios";
 /**
  * In Vercel set:
  *   VITE_API_URL = https://ai-app-8ale.onrender.com
- * (NO trailing /api)
+ * (NO trailing slash)
  *
- * Locally, Vite proxy can use "/api"
+ * This client will automatically talk to:
+ *   https://ai-app-8ale.onrender.com/api
+ *
+ * Locally, Vite proxy uses "/api"
  */
-const baseURL = import.meta.env.VITE_API_URL || "/api";
+function normalizeBase(url) {
+  if (!url) return "";
+  return url.replace(/\/+$/, ""); // remove trailing slash(es)
+}
 
-export const api = axios.create({
+const raw = normalizeBase(import.meta.env.VITE_API_URL);
+
+// If deployed (VITE_API_URL present): use `${VITE_API_URL}/api`
+// If local dev: use "/api" (vite proxy)
+const baseURL = raw ? `${raw}/api` : "/api";
+
+const api = axios.create({
   baseURL,
   withCredentials: true,
 });
