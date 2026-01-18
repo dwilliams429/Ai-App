@@ -1,10 +1,11 @@
 // client/src/App.jsx
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 
 import TopNav from "./components/TopNav";
 import Home from "./pages/Home";
 import Recipes from "./pages/Recipes";
+import RecipeDetail from "./pages/RecipeDetail";
 import Inventory from "./pages/Inventory";
 import ShoppingList from "./pages/ShoppingList";
 import Login from "./pages/Login";
@@ -21,23 +22,48 @@ function RequireAuth({ children }) {
   return children;
 }
 
+function getQFromLocation(loc) {
+  try {
+    const params = new URLSearchParams(loc.search || "");
+    return params.get("q") || "";
+  } catch {
+    return "";
+  }
+}
+
 export default function App() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const loc = useLocation();
 
   const [searchValue, setSearchValue] = useState("");
+
+  // Keep search box in sync with URL ?q= when you are on /recipes or /recipes/:id
+  useEffect(() => {
+    const onRecipesPage = loc.pathname === "/recipes" || loc.pathname.startsWith("/recipes/");
+    if (!onRecipesPage) return;
+
+    const q = getQFromLocation(loc);
+    setSearchValue(q);
+  }, [loc.pathname, loc.search]);
 
   const activeTabLabel = useMemo(() => {
     if (!user) return "Welcome — please login to use saved features.";
     return "";
   }, [user]);
 
+  function goSearch() {
+    const q = (searchValue || "").trim();
+    // Always navigate to /recipes with q
+    navigate(q ? `/recipes?q=${encodeURIComponent(q)}` : "/recipes");
+  }
+
   return (
     <>
       <TopNav
         searchValue={searchValue}
         onSearchChange={setSearchValue}
-        onSearchSubmit={() => navigate("/recipes")}
+        onSearchSubmit={goSearch}
         activeTabLabel={activeTabLabel}
       />
 
@@ -56,6 +82,15 @@ export default function App() {
           element={
             <RequireAuth>
               <Recipes />
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="/recipes/:id"
+          element={
+            <RequireAuth>
+              <RecipeDetail />
             </RequireAuth>
           }
         />

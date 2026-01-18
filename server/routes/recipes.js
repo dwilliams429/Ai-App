@@ -15,15 +15,6 @@ function stripBullets(line) {
   return String(line || "").replace(/^\s*[-•]\s*/, "").trim();
 }
 
-function ingredientLine(x) {
-  // supports string or {item, amount}
-  if (typeof x === "string") return stripBullets(x);
-  const item = stripBullets(x?.item || "");
-  const amount = stripBullets(x?.amount || "");
-  if (!item) return "";
-  return amount ? `${amount} ${item}` : item;
-}
-
 function toTextFromRecipeStruct(recipe) {
   const title = recipe?.title || "Recipe";
   const meta = recipe?.meta || {};
@@ -31,7 +22,7 @@ function toTextFromRecipeStruct(recipe) {
   const diet = meta.diet ?? "None";
 
   const ingredientsLines = asArray(recipe?.ingredients)
-    .map((x) => ingredientLine(x))
+    .map((x) => stripBullets(x))
     .filter(Boolean);
 
   const stepsLines = asArray(recipe?.steps)
@@ -48,12 +39,10 @@ function toTextFromRecipeStruct(recipe) {
       ? stepsLines.map((s, i) => `${i + 1}. ${s}`).join("\n")
       : "1. (none)";
 
-  const summary = String(recipe?.summary || "").trim();
-
   return `${title}
 Diet: ${diet}  •  Time: ${timeMinutes} min
 
-${summary ? `Summary:\n${summary}\n\n` : ""}Ingredients:
+Ingredients:
 ${ingredientsBlock}
 
 Steps:
@@ -63,6 +52,7 @@ ${stepsBlock}
 
 /**
  * POST /recipes/generate   (also works at /api/recipes/generate because of server.js mounts)
+ * Body: { ingredients: string[] | string, diet?: string, timeMinutes?: number, time?: number }
  */
 router.post("/generate", async (req, res) => {
   try {
@@ -80,24 +70,17 @@ router.post("/generate", async (req, res) => {
     });
 
     const recipe = result?.recipe;
-
-    // enforce meta in recipe so formatter always shows correct values
-    const recipeWithMeta = {
-      ...(recipe || {}),
-      meta: { diet, timeMinutes },
-    };
-
-    const text = toTextFromRecipeStruct(recipeWithMeta);
+    const text = toTextFromRecipeStruct(recipe);
 
     if (typeof text !== "string" || !text.trim()) {
       return res.status(500).json({ error: "Invalid recipe response (no text)." });
     }
 
     const doc = await Recipe.create({
-      title: recipeWithMeta?.title || "Recipe",
+      title: recipe?.title || "Recipe",
       text,
       meta: { diet, timeMinutes },
-      recipe: recipeWithMeta || {},
+      recipe: recipe || {},
     });
 
     return res.json({
@@ -116,7 +99,8 @@ router.post("/generate", async (req, res) => {
 });
 
 /**
- * GET /recipes  (also works at /api/recipes)
+ * GET /recipes
+ * Returns { recipes: [...] }
  */
 router.get("/", async (req, res) => {
   try {
@@ -128,6 +112,24 @@ router.get("/", async (req, res) => {
     return res.json({ recipes });
   } catch (err) {
     console.error("❌ /recipes GET error:", err?.message || err);
+    return res.status(500).json({ error: err?.message || "Server error" });
+  }
+});
+
+/**
+ * GET /recipes/:id
+ * Returns { recipe: {...} }
+ */
+router.get("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const recipe = await Recipe.findById(id).lean();
+
+    if (!recipe) return res.status(404).json({ error: "Recipe not found" });
+
+    return res.json({ recipe });
+  } catch (err) {
+    console.error("❌ /recipes/:id GET error:", err?.message || err);
     return res.status(500).json({ error: err?.message || "Server error" });
   }
 });
