@@ -12,16 +12,8 @@ export default function Recipes() {
     setErr("");
     setBusy(true);
     try {
-      const data = await ft.listRecipes();
-
-      // support either { recipes: [...] } OR direct array
-      const arr = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.recipes)
-        ? data.recipes
-        : [];
-
-      setItems(arr);
+      const arr = await ft.listRecipes(); // ✅ now returns array
+      setItems(Array.isArray(arr) ? arr : []);
     } catch (e) {
       setErr(e?.message || "Failed to fetch");
       setItems([]);
@@ -32,12 +24,6 @@ export default function Recipes() {
 
   useEffect(() => {
     load();
-
-    // reload when user returns to tab (helps after generating a recipe)
-    const onFocus = () => load();
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -49,18 +35,21 @@ export default function Recipes() {
       </button>
 
       <div style={{ marginTop: 12 }}>
-        {!busy && items.length === 0 ? (
-          <div className="muted">No saved recipes yet. Generate one on Home.</div>
-        ) : null}
+        {!busy && items.length === 0 ? <div className="muted">No saved recipes yet. Generate one on Home.</div> : null}
 
         {items.map((r, idx) => {
-          const title = r?.title || r?.name || `Recipe ${idx + 1}`;
-          const body = r?.text || r?.recipe || r?.content || "";
+          const title = r?.title || `Recipe ${idx + 1}`;
+          const body = r?.text || "";
           return (
-            <div key={r?._id || r?.id || idx} className="list-card" style={{ marginTop: 12 }}>
+            <div key={r?._id || idx} className="list-card" style={{ marginTop: 12 }}>
               <div style={{ fontWeight: 700 }}>{title}</div>
+              {r?.meta ? (
+                <div className="muted" style={{ marginTop: 4 }}>
+                  Diet: {r.meta.diet || "None"} • Time: {r.meta.timeMinutes || 30} min
+                </div>
+              ) : null}
               {body ? (
-                <div className="muted" style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>
+                <div className="muted" style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>
                   {body}
                 </div>
               ) : null}

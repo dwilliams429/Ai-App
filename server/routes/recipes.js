@@ -11,12 +11,15 @@ function asArray(v) {
   return Array.isArray(v) ? v : [];
 }
 
-function normalizeSteps(steps) {
-  // prevent "1. 1. Step" if a model includes numbering
-  return asArray(steps)
-    .map((s) => String(s || "").trim())
-    .filter(Boolean)
-    .map((s) => s.replace(/^\s*\d+\.\s+/, "").trim());
+function splitCommaString(s) {
+  return String(s || "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+function stripBullets(line) {
+  return String(line || "").replace(/^\s*[-•]\s*/, "").trim();
 }
 
 function toTextFromRecipeStruct(recipe) {
@@ -26,10 +29,12 @@ function toTextFromRecipeStruct(recipe) {
   const diet = meta.diet ?? "None";
 
   const ingredientsLines = asArray(recipe?.ingredients)
-    .map((x) => String(x || "").trim())
+    .map((x) => stripBullets(x))
     .filter(Boolean);
 
-  const stepsLines = normalizeSteps(recipe?.steps);
+  const stepsLines = asArray(recipe?.steps)
+    .map((x) => String(x || "").trim())
+    .filter(Boolean);
 
   const ingredientsBlock =
     ingredientsLines.length > 0 ? ingredientsLines.map((x) => `- ${x}`).join("\n") : "- (none)";
@@ -52,55 +57,65 @@ ${stepsBlock}
  * POST /api/recipes/generate
  * Body: { ingredients: string[] | string, diet?: string, timeMinutes?: number, time?: number }
  *
- * Saves the generated recipe to MongoDB and returns it.
+ * ✅ Generates + AUTO-SAVES recipe into Mongo
  */
 router.post("/generate", async (req, res) => {
   try {
     const body = req.body || {};
 
-    // Allow either array or comma string
     const ingredientsRaw = body.ingredients ?? "";
     const diet = String(body.diet || "None");
     const timeMinutes = Number(body.timeMinutes ?? body.time ?? 30) || 30;
 
-    // Optional: attach to logged-in user if you store it on session
-    const userId = req?.session?.userId ? String(req.session.userId) : null;
+    // Accept either:
+    // - ["chicken","rice"] OR
+    // - "chicken, rice"
+    const inputIngredients = Array.isArray(ingredientsRaw)
+      ? ingredientsRaw.map((s) => String(s).trim()).filter(Boolean)
+      : splitCommaString(ingredientsRaw);
 
-    const result = await generateBetterRecipe({
-      ingredients: ingredientsRaw,
-      pantry: [],
-      diet,
-      timeMinutes
-    });
-
-    const recipe = result?.recipe;
-    if (!recipe || typeof recipe !== "object") {
-      return res.status(500).json({ error: "Invalid recipe response (no recipe object)." });
+    if (!inputIngredients.length) {
+      return res.status(400).json({ error: "ingredients must be a non-empty array or comma string" });
     }
 
-    const text = toTextFromRecipeStruct(recipe);
-    if (!text.trim()) {
+    const result = await generateBetterRecipe({
+      ingredients: inputIngredients, // pass array OR string; your service can handle both
+      pantry: [],
+      diet,
+      timeMinutes,
+    });
+
+    const recipeStruct = result?.recipe;
+    const text = toTextFromRecipeStruct(recipeStruct);
+
+    if (!text || !text.trim()) {
       return res.status(500).json({ error: "Invalid recipe response (no text)." });
     }
 
-    const saved = await Recipe.create({
-      userId,
-      title: recipe?.title || "Recipe",
+    // ✅ Save using sessionId so even demo user has persistence
+    const sessionId = req.sessionID || "no-session";
+    const doc = await Recipe.create({
+      sessionId,
+      title: recipeStruct?.title || "Recipe",
       text,
-      recipe,
-      meta: { diet, timeMinutes },
-      usedAI: Boolean(result?.usedAI),
-      modelUsed: result?.modelUsed || null
+      recipe: recipeStruct,
+      meta: {
+        diet,
+        timeMinutes,
+        usedAI: Boolean(result?.usedAI),
+        modelUsed: result?.modelUsed || null,
+        inputIngredients,
+      },
     });
 
     return res.json({
-      id: saved._id,
-      title: saved.title,
-      text: saved.text,
-      meta: saved.meta,
-      recipe: saved.recipe,
-      usedAI: saved.usedAI,
-      modelUsed: saved.modelUsed
+      title: doc.title,
+      text: doc.text,
+      meta: doc.meta,
+      recipe: doc.recipe,
+      usedAI: Boolean(doc.meta?.usedAI),
+      modelUsed: doc.meta?.modelUsed || null,
+      savedId: doc._id,
     });
   } catch (err) {
     console.error("❌ /api/recipes/generate error:", err?.message || err);
@@ -110,25 +125,25 @@ router.post("/generate", async (req, res) => {
 
 /**
  * GET /api/recipes
- * Returns saved recipes (most recent first).
+ * ✅ Returns saved recipes for this browser session
  */
 router.get("/", async (req, res) => {
   try {
-    const userId = req?.session?.userId ? String(req.session.userId) : null;
+    const sessionId = req.sessionID || "no-session";
+    const recipes = await Recipe.find({ sessionId })
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .lean();
 
-    const filter = userId ? { userId } : {};
-    const recipes = await Recipe.find(filter).sort({ createdAt: -1 }).limit(50).lean();
-
+    // Keep a safe client shape
     return res.json({
       recipes: recipes.map((r) => ({
         _id: r._id,
         title: r.title,
         text: r.text,
         meta: r.meta,
-        usedAI: r.usedAI,
-        modelUsed: r.modelUsed,
-        createdAt: r.createdAt
-      }))
+        createdAt: r.createdAt,
+      })),
     });
   } catch (err) {
     console.error("❌ /api/recipes GET error:", err?.message || err);
