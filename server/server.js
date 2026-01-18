@@ -25,10 +25,10 @@ app.use(cookieParser());
 // --------------------
 // ENV helpers
 // --------------------
-const MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URI || process.env.MONGODB_URI;
+const MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URI;
 const SESSION_SECRET = process.env.SESSION_SECRET;
 
-const rawOrigins = process.env.CLIENT_ORIGIN || process.env.CLIENT_ORIGINS || process.env.CLIENT_ORIGINS || "";
+const rawOrigins = process.env.CLIENT_ORIGIN || process.env.CLIENT_ORIGINS || "";
 const allowedOrigins = rawOrigins
   .split(",")
   .map((s) => s.trim())
@@ -114,18 +114,16 @@ async function start() {
 
   // --------------------
   // ROUTES
-  // Your client in Vercel hits:
-  //   https://ai-app-8ale.onrender.com/<route>
-  // so we mount BOTH root + /api to avoid mismatches.
+  // Mount BOTH root + /api so your client works no matter what baseURL is.
   // --------------------
 
-  // ROOT (production matches your client baseURL = https://ai-app-8ale.onrender.com)
+  // Root
   app.use("/auth", authRoutes);
   app.use("/inventory", inventoryRoutes);
   app.use("/recipes", recipesRoutes);
   app.use("/shopping", shoppingRoutes);
 
-  // ALSO allow /api/* (local proxy setups, future-proof)
+  // /api
   app.use("/api/auth", authRoutes);
   app.use("/api/inventory", inventoryRoutes);
   app.use("/api/recipes", recipesRoutes);

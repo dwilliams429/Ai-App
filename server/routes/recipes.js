@@ -2,65 +2,105 @@
 const express = require("express");
 const router = express.Router();
 
+const { generateBetterRecipe } = require("../services/aiRecipe");
+
+function asArray(v) {
+  return Array.isArray(v) ? v : [];
+}
+
+function stripBullets(line) {
+  return String(line || "").replace(/^\s*[-•]\s*/, "").trim();
+}
+
+function toTextFromRecipeStruct(recipe) {
+  const title = recipe?.title || "Recipe";
+  const meta = recipe?.meta || {};
+  const timeMinutes = meta.timeMinutes ?? 30;
+  const diet = meta.diet ?? "None";
+
+  const ingredientsLines = asArray(recipe?.ingredients)
+    .map((x) => stripBullets(x))
+    .filter(Boolean);
+
+  const stepsLines = asArray(recipe?.steps)
+    .map((x) => String(x || "").trim())
+    .filter(Boolean);
+
+  const ingredientsBlock =
+    ingredientsLines.length > 0
+      ? ingredientsLines.map((x) => `- ${x}`).join("\n")
+      : "- (none)";
+
+  const stepsBlock =
+    stepsLines.length > 0
+      ? stepsLines.map((s, i) => `${i + 1}. ${s}`).join("\n")
+      : "1. (none)";
+
+  return `${title}
+Diet: ${diet}  •  Time: ${timeMinutes} min
+
+Ingredients:
+${ingredientsBlock}
+
+Steps:
+${stepsBlock}
+`;
+}
+
 /**
- * Mounted in server.js like:
- *   app.use("/api/recipes", recipesRoutes);
+ * POST /api/recipes/generate
+ * Body: { ingredients: string[] | string, diet?: string, timeMinutes?: number, time?: number }
  *
- * So this endpoint becomes:
- *   POST /api/recipes/generate
- *
- * ✅ Always returns: { title: string, text: string, meta: {...} }
+ * Response:
+ * { text: string, title: string, meta: {...}, recipe: {...}, usedAI: boolean, modelUsed?: string }
  */
 router.post("/generate", async (req, res) => {
   try {
     const body = req.body || {};
 
-    const ingredients = Array.isArray(body.ingredients) ? body.ingredients : [];
-    const diet = body.diet || "None";
-
-    // support either timeMinutes or time
+    // Allow either array or comma string
+    const ingredientsRaw = body.ingredients ?? "";
+    const diet = String(body.diet || "None");
     const timeMinutes = Number(body.timeMinutes ?? body.time ?? 30) || 30;
 
-    if (!ingredients.length) {
-      return res.status(400).json({ error: "ingredients must be a non-empty array" });
+    // generateBetterRecipe expects: { ingredients, pantry, diet, timeMinutes }
+    const result = await generateBetterRecipe({
+      ingredients: ingredientsRaw,
+      pantry: [], // (optional) wire this later if you want
+      diet,
+      timeMinutes,
+    });
+
+    // result shape from your aiRecipe.js:
+    // { recipe: {title, ingredients[], steps[], meta}, usedAI, modelUsed }
+    const recipe = result?.recipe;
+
+    // Build text for the client (this is what Home.jsx needs)
+    const text = toTextFromRecipeStruct(recipe);
+
+    if (typeof text !== "string" || !text.trim()) {
+      return res.status(500).json({ error: "Invalid recipe response (no text)." });
     }
 
-    const main = String(ingredients[0] || "Recipe").trim() || "Recipe";
-    const title = `${diet !== "None" ? `${diet} ` : ""}${main} Bowl`;
-
-    const steps = [
-      `Prep ingredients (target ${timeMinutes} min total).`,
-      "Heat pan, add oil, cook main protein/veg until done.",
-      "Combine remaining ingredients, season to taste.",
-      "Serve warm.",
-    ];
-
-    const text = `${title}
-
-Ingredients:
-${ingredients.join(", ")}
-
-Steps:
-${steps.map((s, i) => `${i + 1}. ${s}`).join("\n")}
-`;
-
     return res.json({
-      title,
+      title: recipe?.title || "Recipe",
       text,
       meta: { diet, timeMinutes },
+      recipe,
+      usedAI: Boolean(result?.usedAI),
+      modelUsed: result?.modelUsed || null,
     });
   } catch (err) {
+    console.error("❌ /api/recipes/generate error:", err?.message || err);
     return res.status(500).json({ error: err?.message || "Server error" });
   }
 });
 
-// Optional: GET /api/recipes
+/**
+ * GET /api/recipes
+ */
 router.get("/", async (req, res) => {
-  try {
-    return res.json({ recipes: [] });
-  } catch (err) {
-    return res.status(500).json({ error: err?.message || "Server error" });
-  }
+  return res.json({ recipes: [] });
 });
 
 module.exports = router;

@@ -1,6 +1,7 @@
+// client/src/pages/Home.jsx
 import React, { useState } from "react";
 import GlassCard from "../components/GlassCard";
-import { api } from "../api/http";
+import ft from "../api/ft";
 
 export default function Home() {
   const [ingredients, setIngredients] = useState("chicken, rice, broccoli");
@@ -8,19 +9,37 @@ export default function Home() {
   const [timeMinutes, setTimeMinutes] = useState(30);
 
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState(null);
-  const [missingItems, setMissingItems] = useState([]);
-  const [shoppingAutoAdded, setShoppingAutoAdded] = useState(0);
   const [err, setErr] = useState("");
+  const [recipeText, setRecipeText] = useState("");
 
   async function onGenerate() {
     setErr("");
+    setRecipeText("");
+
+    const cleaned = ingredients
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    if (cleaned.length === 0) {
+      setErr("Please enter at least 1 ingredient.");
+      return;
+    }
+
     setBusy(true);
     try {
-      const data = await api.generateRecipe({ ingredients, diet, timeMinutes });
-      setResult(data.recipe || null);
-      setMissingItems(data.missingItems || []);
-      setShoppingAutoAdded(Number(data.shoppingAutoAdded || 0));
+      const data = await ft.generateRecipe({
+        ingredients: cleaned,
+        diet,
+        timeMinutes: Number(timeMinutes) || 30,
+      });
+
+      // ✅ SINGLE SOURCE OF TRUTH
+      if (!data || typeof data.text !== "string") {
+        throw new Error("Invalid recipe response from server (expected { text: string }).");
+      }
+
+      setRecipeText(data.text);
     } catch (e) {
       setErr(e.message || "Failed to generate recipe");
     } finally {
@@ -31,22 +50,27 @@ export default function Home() {
   return (
     <GlassCard
       title="Featured Recipe"
-      subtitle="Generates a recipe from your typed ingredients + in-stock inventory. Missing items auto-add to Shopping List."
+      subtitle="Generate a better recipe from your ingredients + your saved inventory."
     >
-      <div className="form-grid">
-        <label className="field">
-          <span className="field__label">Ingredients (comma separated)</span>
-          <input
-            className="field__input"
-            value={ingredients}
-            onChange={(e) => setIngredients(e.target.value)}
-            placeholder="e.g. chicken, rice, broccoli"
-          />
-        </label>
+      {err && <div className="error-banner">⚠️ {err}</div>}
 
-        <label className="field">
+      <div className="field">
+        <div className="field__label">Ingredients (comma separated)</div>
+        <input
+          className="field__input"
+          value={ingredients}
+          onChange={(e) => setIngredients(e.target.value)}
+        />
+      </div>
+
+      <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
+        <label className="field" style={{ flex: 1 }}>
           <span className="field__label">Diet</span>
-          <select className="field__input" value={diet} onChange={(e) => setDiet(e.target.value)}>
+          <select
+            className="field__input"
+            value={diet}
+            onChange={(e) => setDiet(e.target.value)}
+          >
             <option>None</option>
             <option>Vegetarian</option>
             <option>Vegan</option>
@@ -55,74 +79,31 @@ export default function Home() {
           </select>
         </label>
 
-        <label className="field">
+        <label className="field" style={{ width: 180 }}>
           <span className="field__label">Time (minutes)</span>
           <input
             className="field__input"
             type="number"
-            min={5}
-            max={240}
             value={timeMinutes}
-            onChange={(e) => setTimeMinutes(Number(e.target.value))}
+            onChange={(e) => setTimeMinutes(e.target.value)}
           />
         </label>
-
-        <button className="big-btn" onClick={onGenerate} disabled={busy} type="button">
-          {busy ? "Generating..." : "Generate"}
-        </button>
       </div>
 
-      {err ? <div className="error-banner">⚠️ {err}</div> : null}
+      <button
+        className="big-btn"
+        style={{ marginTop: 14 }}
+        disabled={busy}
+        onClick={onGenerate}
+      >
+        {busy ? "Generating..." : "Generate"}
+      </button>
 
-      {result ? (
-        <div className="result">
-          <h2 className="result__title">{result.title}</h2>
-
-          <div className="result__meta">
-            <span className="meta-pill">Diet: {result.meta?.diet || "None"}</span>
-            <span className="meta-pill">Time: {result.meta?.timeMinutes || 30} min</span>
-            <span className="meta-pill">Cuisine: {result.meta?.cuisine || "Custom"}</span>
-          </div>
-
-          {missingItems?.length ? (
-            <div className="info-banner" style={{ marginTop: 12 }}>
-              🛒 Missing items added to Shopping List: <b>{shoppingAutoAdded}</b>
-              <div className="muted" style={{ marginTop: 6 }}>
-                Missing: {missingItems.join(", ")}
-              </div>
-            </div>
-          ) : (
-            <div className="success-banner" style={{ marginTop: 12 }}>
-              ✅ Looks like you have everything on-hand (based on your inventory).
-            </div>
-          )}
-
-          <div className="result__cols">
-            <div className="result__col">
-              <h3 className="result__h">Ingredients</h3>
-              <ul className="clean-list">
-                {(result.ingredients || []).map((it) => (
-                  <li key={it}>{it}</li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="result__col">
-              <h3 className="result__h">Steps</h3>
-              <ol className="clean-list">
-                {(result.steps || []).map((s, idx) => (
-                  <li key={`${idx}-${s}`}>{s}</li>
-                ))}
-              </ol>
-              {result.meta?.notes ? (
-                <div className="muted" style={{ marginTop: 10 }}>
-                  {result.meta.notes}
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {recipeText && (
+        <pre style={{ marginTop: 16, whiteSpace: "pre-wrap" }}>
+          {recipeText}
+        </pre>
+      )}
     </GlassCard>
   );
 }
