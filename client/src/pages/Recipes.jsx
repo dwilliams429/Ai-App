@@ -12,8 +12,9 @@ export default function Recipes() {
     setErr("");
     setBusy(true);
     try {
-      const arr = await ft.listRecipes(); // ✅ now returns array
-      setItems(Array.isArray(arr) ? arr : []);
+      const data = await ft.listRecipes();
+      const arr = Array.isArray(data?.recipes) ? data.recipes : [];
+      setItems(arr);
     } catch (e) {
       setErr(e?.message || "Failed to fetch");
       setItems([]);
@@ -24,10 +25,28 @@ export default function Recipes() {
 
   useEffect(() => {
     load();
+
+    // ✅ Auto-refresh when Home saves (storage event fires across tabs/windows)
+    function onStorage(e) {
+      if (e.key === "recipes:lastSavedAt") load();
+    }
+
+    // ✅ Also refresh when user returns to this tab
+    function onVisible() {
+      if (document.visibilityState === "visible") load();
+    }
+
+    window.addEventListener("storage", onStorage);
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
 
   return (
-    <GlassCard title="Recipes" subtitle="Your saved recipes live here. Generate recipes on Home.">
+    <GlassCard title="Recipes" subtitle="Saved recipes from Home (stored in MongoDB).">
       {err ? <div className="error-banner">⚠️ {err}</div> : null}
 
       <button className="small-btn" onClick={load} disabled={busy} style={{ marginTop: 10 }}>
@@ -35,19 +54,19 @@ export default function Recipes() {
       </button>
 
       <div style={{ marginTop: 12 }}>
-        {!busy && items.length === 0 ? <div className="muted">No saved recipes yet. Generate one on Home.</div> : null}
+        {!busy && items.length === 0 ? (
+          <div className="muted">No saved recipes yet. Generate one on Home.</div>
+        ) : null}
 
         {items.map((r, idx) => {
           const title = r?.title || `Recipe ${idx + 1}`;
           const body = r?.text || "";
+          const when = r?.createdAt ? new Date(r.createdAt).toLocaleString() : "";
+
           return (
             <div key={r?._id || idx} className="list-card" style={{ marginTop: 12 }}>
               <div style={{ fontWeight: 700 }}>{title}</div>
-              {r?.meta ? (
-                <div className="muted" style={{ marginTop: 4 }}>
-                  Diet: {r.meta.diet || "None"} • Time: {r.meta.timeMinutes || 30} min
-                </div>
-              ) : null}
+              {when ? <div className="muted" style={{ marginTop: 4 }}>{when}</div> : null}
               {body ? (
                 <div className="muted" style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>
                   {body}

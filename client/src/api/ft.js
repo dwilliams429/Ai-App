@@ -4,21 +4,20 @@ import api from "./http";
 const ft = {
   // ---------- Recipes ----------
   async generateRecipe(payload) {
-    // ✅ baseURL already points to /api in prod (or /api via proxy locally)
+    // server supports /recipes and /api/recipes (server.js mounts both)
     const res = await api.post("/recipes/generate", payload);
     return res.data;
   },
 
   async listRecipes() {
     const res = await api.get("/recipes");
-    // server returns: { recipes: [...] }
-    return Array.isArray(res.data?.recipes) ? res.data.recipes : [];
+    return res.data;
   },
 
   // ---------- Inventory ----------
   async listInventory() {
     const res = await api.get("/inventory");
-    return Array.isArray(res.data?.items) ? res.data.items : [];
+    return res.data;
   },
 
   async addInventory(payload) {
@@ -29,7 +28,7 @@ const ft = {
   // ---------- Shopping ----------
   async listShopping() {
     const res = await api.get("/shopping");
-    return Array.isArray(res.data?.items) ? res.data.items : [];
+    return res.data;
   },
 
   async addShopping(payload) {

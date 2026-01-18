@@ -2,41 +2,43 @@
 import axios from "axios";
 
 /**
- * RULES (locked-in):
- * - In production: VITE_API_URL = https://ai-app-8ale.onrender.com
- *   → baseURL = https://ai-app-8ale.onrender.com/api
+ * Vercel:
+ *   VITE_API_URL = https://ai-app-8ale.onrender.com
+ * (NO trailing slash, NO /api)
  *
- * - In local dev: VITE_API_URL is undefined
- *   → baseURL = "/api" (Vite proxy)
- *
- * - NEVER allow "/api/api"
+ * Local:
+ *   use Vite proxy -> baseURL becomes "/api"
  */
 
 function normalizeBase(url) {
   if (!url) return "";
-
-  // remove trailing slashes
-  let clean = url.replace(/\/+$/, "");
-
-  // if someone accidentally sets VITE_API_URL ending in /api, strip it
-  if (clean.endsWith("/api")) {
-    clean = clean.slice(0, -4);
-  }
-
-  return clean;
+  return String(url).trim().replace(/\/+$/, "");
 }
 
 const raw = normalizeBase(import.meta.env.VITE_API_URL);
 
-// final baseURL decision
-const baseURL = raw ? `${raw}/api` : "/api";
+// If deployed (VITE_API_URL present): use https://... (no /api here)
+// If local: use "/api" and the proxy handles it
+const baseURL = raw || "/api";
 
-const api = axios.create({
+export const api = axios.create({
   baseURL,
   withCredentials: true,
-  headers: {
-    "Content-Type": "application/json",
-  },
 });
+
+api.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    const status = err?.response?.status;
+    const url = err?.config?.url || "";
+
+    if (status === 401 && url.includes("/auth/me")) {
+      return Promise.reject(err);
+    }
+
+    console.error("[api] error:", status, err?.response?.data || err?.message);
+    return Promise.reject(err);
+  }
+);
 
 export default api;

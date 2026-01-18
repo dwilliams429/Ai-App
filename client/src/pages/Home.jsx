@@ -34,12 +34,14 @@ export default function Home() {
         timeMinutes: Number(timeMinutes) || 30,
       });
 
-      // ✅ Hard requirement: server must return { text: string }
       if (!data || typeof data.text !== "string") {
         throw new Error("Invalid recipe response from server (expected { text: string }).");
       }
 
       setRecipeText(data.text);
+
+      // ✅ tell other pages (Recipes) something new was saved
+      localStorage.setItem("recipes:lastSavedAt", String(Date.now()));
     } catch (e) {
       setErr(e?.message || "Failed to generate recipe");
     } finally {
